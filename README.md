@@ -1,7 +1,10 @@
 # openclio — Local-first Personal AI Agent in Go
 
 <p align="center">
-  <img src="docs/assets/openclio-logo-sky.svg" alt="openclio sky blue logo" width="920" />
+  <picture>
+    <source type="image/svg+xml" srcset="docs/assets/openclio-logo-sky.svg" />
+    <img src="docs/assets/openclio-logo-sky.png" alt="openclio sky blue logo" width="920" />
+  </picture>
 </p>
 
 > A fast, private, token-efficient AI agent. Single binary, no cloud storage, no telemetry.
@@ -230,6 +233,10 @@ Create optional files in `~/.openclio/`:
 | `skills/*.md` | On-demand skill files (loaded with `/skill <name>`) | Unlimited |
 
 Run `openclio init` to create these files interactively.
+
+On first run, openclio also seeds these built-in skills in `~/.openclio/skills/`:
+`code-review`, `security-audit`, `bug-triage`, `release-checklist`,
+`perf-profiling`, `docs-writer`, `migration-planner`, `incident-response`.
 
 ## Security
 

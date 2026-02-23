@@ -7,6 +7,8 @@ bin/
 agent
 openclio
 openclio-*
+!docs/assets/openclio-logo-sky.png
+!docs/assets/openclio-icon-sky.png
 
 # Test
 *.test
