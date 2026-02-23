@@ -1,5 +1,9 @@
 # openclio — Local-first Personal AI Agent in Go
 
+<p align="center">
+  <img src="docs/assets/openclio-logo-sky.svg" alt="openclio sky blue logo" width="920" />
+</p>
+
 > A fast, private, token-efficient AI agent. Single binary, no cloud storage, no telemetry.
 
 [![CI](https://github.com/openclio/openclio/actions/workflows/ci.yml/badge.svg)](https://github.com/openclio/openclio/actions)
