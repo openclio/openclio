@@ -1,0 +1,60 @@
+<svg width="1280" height="360" viewBox="0 0 1280 360" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bgGrad" x1="80" y1="28" x2="1200" y2="340" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#E0F2FE"/>
+      <stop offset="45%" stop-color="#BAE6FD"/>
+      <stop offset="100%" stop-color="#7DD3FC"/>
+    </linearGradient>
+    <radialGradient id="bgGlow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(962 104) rotate(138.52) scale(430 239)">
+      <stop offset="0%" stop-color="#F0F9FF" stop-opacity="0.88"/>
+      <stop offset="100%" stop-color="#F0F9FF" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="tileGrad" x1="42" y1="38" x2="268" y2="282" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#22D3EE"/>
+      <stop offset="100%" stop-color="#0369A1"/>
+    </linearGradient>
+    <linearGradient id="cometGrad" x1="84" y1="72" x2="208" y2="180" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#ECFEFF"/>
+      <stop offset="100%" stop-color="#BAE6FD"/>
+    </linearGradient>
+    <linearGradient id="wordOpen" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#0369A1"/>
+      <stop offset="100%" stop-color="#0C4A6E"/>
+    </linearGradient>
+    <linearGradient id="wordClio" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#0EA5E9"/>
+      <stop offset="100%" stop-color="#0369A1"/>
+    </linearGradient>
+    <filter id="softShadow" x="-50%" y="-50%" width="200%" height="200%">
+      <feDropShadow dx="0" dy="12" stdDeviation="14" flood-color="#0C4A6E" flood-opacity="0.18"/>
+    </filter>
+  </defs>
+
+  <rect x="18" y="18" width="1244" height="324" rx="44" fill="url(#bgGrad)"/>
+  <rect x="18" y="18" width="1244" height="324" rx="44" fill="url(#bgGlow)"/>
+
+  <circle cx="1115" cy="66" r="12" fill="#E0F7FF" opacity="0.75"/>
+  <circle cx="1174" cy="108" r="8" fill="#CFFAFE" opacity="0.82"/>
+  <circle cx="1044" cy="312" r="16" fill="#E0F7FF" opacity="0.55"/>
+
+  <!-- Icon tile -->
+  <g transform="translate(42,40)" filter="url(#softShadow)">
+    <rect x="0" y="0" width="244" height="244" rx="72" fill="url(#tileGrad)"/>
+    <rect x="12" y="12" width="220" height="220" rx="62" fill="#BAE6FD" fill-opacity="0.18"/>
+    <circle cx="122" cy="122" r="86" stroke="#E0F7FF" stroke-opacity="0.55" stroke-width="8"/>
+
+    <path d="M175 82C153 61 120 55 91 67C62 79 43 108 44 139C45 170 67 197 98 205C128 213 160 203 179 181" stroke="url(#cometGrad)" stroke-width="24" stroke-linecap="round"/>
+    <path d="M180 181L206 186L195 160" fill="#E0F7FF"/>
+    <circle cx="86" cy="93" r="7.5" fill="#E0F7FF"/>
+    <circle cx="74" cy="183" r="5.5" fill="#BAE6FD"/>
+
+    <path d="M177 68L185 84L201 92L185 100L177 116L169 100L153 92L169 84L177 68Z" fill="#ECFEFF"/>
+  </g>
+
+  <!-- Wordmark -->
+  <g aria-label="openclio">
+    <text x="344" y="188" fill="url(#wordOpen)" font-size="118" font-family="Sora, Manrope, Avenir Next, Montserrat, sans-serif" font-weight="800" letter-spacing="-1">open</text>
+    <text x="620" y="188" fill="url(#wordClio)" font-size="118" font-family="Sora, Manrope, Avenir Next, Montserrat, sans-serif" font-weight="800" letter-spacing="-1">clio</text>
+    <text x="350" y="236" fill="#075985" font-size="26" font-family="Sora, Manrope, Avenir Next, Montserrat, sans-serif" font-weight="600" letter-spacing="3.2">LOCAL-FIRST AGENT GATEWAY</text>
+  </g>
+</svg>
