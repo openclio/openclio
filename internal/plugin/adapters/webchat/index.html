@@ -1582,6 +1582,9 @@
   let reportedWhatsAppConnected = false;
   let runInProgress = false;
   let abortRequested = false;
+  let reconnectTimer = null;
+  let reconnectDelayMs = 3000;
+  let reconnectDisabled = false;
   const PAGE_SIZE = 20;
 
   const params = new URLSearchParams(location.search);
@@ -2925,6 +2928,8 @@
     // Reconnect WebSocket if not open.
     if (!ws || ws.readyState === WebSocket.CLOSED || ws.readyState === WebSocket.CLOSING) {
       reconnectAttempts = 0;
+      reconnectDelayMs = 3000;
+      clearReconnectTimer();
       connect();
     }
   }
@@ -5301,31 +5306,58 @@
     }
   }
 
+  function clearReconnectTimer() {
+    if (!reconnectTimer) {
+      return;
+    }
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
+
+  function scheduleReconnect() {
+    if (reconnectDisabled) {
+      return;
+    }
+    clearReconnectTimer();
+    reconnectAttempts += 1;
+    const delayMs = Math.min(30000, reconnectDelayMs);
+    reconnectDelayMs = Math.min(30000, Math.floor(reconnectDelayMs * 1.6));
+    const seconds = Math.max(1, Math.ceil(delayMs / 1000));
+    statusText.textContent = `Disconnected — retrying in ${seconds}s...`;
+    reconnectTimer = setTimeout(() => {
+      reconnectTimer = null;
+      connect();
+    }, delayMs);
+  }
+
   function connect() {
+    if (reconnectDisabled) {
+      return;
+    }
+    if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
+      return;
+    }
     const proto = location.protocol === "https:" ? "wss" : "ws";
     const url = `${proto}://${location.host}/ws${token ? `?token=${encodeURIComponent(token)}` : ""}`;
     ws = new WebSocket(url);
+    statusText.textContent = reconnectAttempts > 0 ? "Reconnecting..." : "Connecting...";
 
     ws.onopen = () => {
+      clearReconnectTimer();
       reconnectAttempts = 0;
+      reconnectDelayMs = 3000;
       dot.classList.add("connected");
       statusText.textContent = "Connected";
       updateStopButtonState();
     };
 
     ws.onclose = () => {
+      ws = null;
       dot.classList.remove("connected");
       removeTyping();
       setRunInProgress(false);
       setInputEnabled(true);
-      reconnectAttempts += 1;
-      if (reconnectAttempts > 5) {
-        statusText.textContent = "Disconnected";
-        showToast("WebSocket disconnected. Retry manually from refresh button.", true);
-        return;
-      }
-      statusText.textContent = `Disconnected — retrying (${reconnectAttempts}/5)...`;
-      setTimeout(connect, 3000);
+      scheduleReconnect();
     };
 
     ws.onerror = () => {
@@ -5342,7 +5374,8 @@
 
   async function ensureSocketAuthorization() {
     try {
-      await apiFetch("/api/v1/health");
+      // Use an authenticated endpoint so invalid/missing tokens are detected.
+      await apiFetch("/api/v1/config");
       return true;
     } catch (_) {
       return false;
@@ -5554,6 +5587,31 @@
     }
   });
   window.addEventListener("hashchange", applyRoute);
+  window.addEventListener("online", () => {
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+      reconnectAttempts = 0;
+      reconnectDelayMs = 3000;
+      clearReconnectTimer();
+      connect();
+    }
+  });
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden && (!ws || ws.readyState !== WebSocket.OPEN)) {
+      reconnectAttempts = 0;
+      reconnectDelayMs = 3000;
+      clearReconnectTimer();
+      connect();
+    }
+  });
+  window.addEventListener("beforeunload", () => {
+    reconnectDisabled = true;
+    clearReconnectTimer();
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      try {
+        ws.close(1000, "page unloading");
+      } catch (_) {}
+    }
+  });
 
   // --- init ---
   if (!window.location.hash) {

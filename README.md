@@ -59,6 +59,11 @@ The engine combines recent-turn working memory, vector-similarity episodic retri
 ```bash
 curl -sSL https://raw.githubusercontent.com/openclio/openclio/main/install.sh | sh
 ```
+By default, installer targets a system path (`/usr/local/bin`, or `/opt/homebrew/bin` on Apple Silicon).
+Override with:
+```bash
+OPENCLIO_INSTALL_DIR=/custom/bin curl -sSL https://raw.githubusercontent.com/openclio/openclio/main/install.sh | sh
+```
 
 ### From source
 ```bash

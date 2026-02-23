@@ -6,7 +6,37 @@ set -e
 
 REPO="openclio/openclio"
 BINARY="openclio"
-INSTALL_DIR="${HOME}/.local/bin"
+OS=$(uname -s | tr '[:upper:]' '[:lower:]')
+RAW_ARCH=$(uname -m)
+
+case "${RAW_ARCH}" in
+  x86_64)  ARCH="amd64" ;;
+  aarch64) ARCH="arm64" ;;
+  arm64)   ARCH="arm64" ;;
+  *)
+    echo "✗ Unsupported architecture: ${RAW_ARCH}"
+    echo "  Download manually: https://github.com/${REPO}/releases"
+    exit 1
+    ;;
+esac
+
+case "${OS}" in
+  linux|darwin) ;;
+  *)
+    echo "✗ Unsupported OS: ${OS}"
+    echo "  Download manually: https://github.com/${REPO}/releases"
+    exit 1
+    ;;
+esac
+
+# Prefer system-wide install paths so the binary is available from standard PATH.
+# Users can override with: OPENCLIO_INSTALL_DIR=/custom/path
+DEFAULT_INSTALL_DIR="/usr/local/bin"
+if [ "${OS}" = "darwin" ] && [ "${ARCH}" = "arm64" ] && [ -d "/opt/homebrew/bin" ]; then
+  DEFAULT_INSTALL_DIR="/opt/homebrew/bin"
+fi
+INSTALL_DIR="${OPENCLIO_INSTALL_DIR:-${DEFAULT_INSTALL_DIR}}"
+USE_SUDO=0
 
 # ── Banner ────────────────────────────────────────────────────────────────────
 echo ""
@@ -23,29 +53,16 @@ echo ""
 echo "─────────────────────────────────────────────────────────────────────────"
 echo ""
 
-# ── Detect platform ───────────────────────────────────────────────────────────
-OS=$(uname -s | tr '[:upper:]' '[:lower:]')
-ARCH=$(uname -m)
-
-case "${ARCH}" in
-  x86_64)  ARCH="amd64" ;;
-  aarch64) ARCH="arm64" ;;
-  arm64)   ARCH="arm64" ;;
-  *)
-    echo "✗ Unsupported architecture: ${ARCH}"
-    echo "  Download manually: https://github.com/${REPO}/releases"
-    exit 1
-    ;;
-esac
-
-case "${OS}" in
-  linux|darwin) ;;
-  *)
-    echo "✗ Unsupported OS: ${OS}"
-    echo "  Download manually: https://github.com/${REPO}/releases"
-    exit 1
-    ;;
-esac
+# ── Resolve install permissions ───────────────────────────────────────────────
+if [ -z "${OPENCLIO_INSTALL_DIR}" ] && [ ! -w "${INSTALL_DIR}" ]; then
+  if command -v sudo >/dev/null 2>&1; then
+    USE_SUDO=1
+  else
+    INSTALL_DIR="${HOME}/.local/bin"
+    echo "  Note: system install path is not writable and sudo is unavailable."
+    echo "        Falling back to user install path: ${INSTALL_DIR}"
+  fi
+fi
 
 # ── Fetch latest version ──────────────────────────────────────────────────────
 echo "  Fetching latest release..."
@@ -83,8 +100,13 @@ fi
 echo "  Installing..."
 tar -xzf "${TMP_DIR}/${ARCHIVE}" -C "${TMP_DIR}"
 chmod +x "${TMP_DIR}/${BINARY}-${VERSION}-${OS}-${ARCH}"
-mkdir -p "${INSTALL_DIR}"
-mv "${TMP_DIR}/${BINARY}-${VERSION}-${OS}-${ARCH}" "${INSTALL_DIR}/${BINARY}"
+if [ "${USE_SUDO}" -eq 1 ]; then
+  sudo mkdir -p "${INSTALL_DIR}"
+  sudo install -m 0755 "${TMP_DIR}/${BINARY}-${VERSION}-${OS}-${ARCH}" "${INSTALL_DIR}/${BINARY}"
+else
+  mkdir -p "${INSTALL_DIR}"
+  install -m 0755 "${TMP_DIR}/${BINARY}-${VERSION}-${OS}-${ARCH}" "${INSTALL_DIR}/${BINARY}"
+fi
 rm -rf "${TMP_DIR}"
 
 if [ ! -x "${INSTALL_DIR}/${BINARY}" ]; then
