@@ -338,7 +338,7 @@ func (s *Server) callLocked(ctx context.Context, method string, params any, out 
 	}
 	line = append(line, '\n')
 	if _, err := s.stdin.Write(line); err != nil {
-		return fmt.Errorf("write request %s: %w%s", method, err, s.stderrSuffix())
+		return fmt.Errorf("write request %s: %w%s", method, err, s.stderrSuffixLocked())
 	}
 
 	wantID := strconv.FormatInt(id, 10)
@@ -350,9 +350,9 @@ func (s *Server) callLocked(ctx context.Context, method string, params any, out 
 		respLine, err := s.stdout.ReadBytes('\n')
 		if err != nil {
 			if err == io.EOF {
-				return fmt.Errorf("mcp server %q closed stdout%s", s.Name, s.stderrSuffix())
+				return fmt.Errorf("mcp server %q closed stdout%s", s.Name, s.stderrSuffixLocked())
 			}
-			return fmt.Errorf("read response for %s: %w%s", method, err, s.stderrSuffix())
+			return fmt.Errorf("read response for %s: %w%s", method, err, s.stderrSuffixLocked())
 		}
 		respLine = bytesTrimSpace(respLine)
 		if len(respLine) == 0 {
@@ -426,6 +426,10 @@ func (s *Server) captureStderr(r io.Reader) {
 func (s *Server) stderrSuffix() string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	return s.stderrSuffixLocked()
+}
+
+func (s *Server) stderrSuffixLocked() string {
 	if s.stderrBuf.Len() == 0 {
 		return ""
 	}
