@@ -87,6 +87,12 @@ mkdir -p "${INSTALL_DIR}"
 mv "${TMP_DIR}/${BINARY}-${VERSION}-${OS}-${ARCH}" "${INSTALL_DIR}/${BINARY}"
 rm -rf "${TMP_DIR}"
 
+if [ ! -x "${INSTALL_DIR}/${BINARY}" ]; then
+  echo ""
+  echo "✗ Install failed: ${INSTALL_DIR}/${BINARY} is missing or not executable"
+  exit 1
+fi
+
 # ── Done ──────────────────────────────────────────────────────────────────────
 echo ""
 echo "─────────────────────────────────────────────────────────────────────────"
@@ -94,15 +100,18 @@ echo ""
 echo "  ✓ openclio ${VERSION} installed successfully!"
 echo ""
 echo "  Next steps:"
-echo "    1. Set your API key    →  export ANTHROPIC_API_KEY=\"sk-ant-...\""
-echo "    2. Run setup wizard    →  openclio init"
-echo "    3. Start chatting      →  openclio"
+echo "    1. Run setup wizard    →  openclio init"
+echo "    2. Choose provider     →  Select Ollama/OpenAI/Anthropic/Gemini in the wizard"
+echo "    3. Set credentials     →  Use the env var shown by the wizard (if required)"
+echo "    4. Start chatting      →  openclio"
 echo ""
 
 # PATH hint
 if ! echo ":${PATH}:" | grep -q ":${INSTALL_DIR}:"; then
   echo "  Note: Add ${INSTALL_DIR} to your PATH:"
   echo "    echo 'export PATH=\"${INSTALL_DIR}:\$PATH\"' >> ~/.zshrc && source ~/.zshrc"
+  echo "  Or run directly now:"
+  echo "    ${INSTALL_DIR}/${BINARY} init"
   echo ""
 fi
 

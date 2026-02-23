@@ -325,8 +325,8 @@ func (c *Config) Validate() error {
 	if c.Gateway.Port < 1 || c.Gateway.Port > 65535 {
 		return fmt.Errorf("gateway port must be between 1 and 65535, got %d", c.Gateway.Port)
 	}
-	if c.Model.Provider == "" {
-		return fmt.Errorf("model provider cannot be empty")
+	if strings.TrimSpace(c.Model.Provider) == "" {
+		// Allowed in setup mode; user picks provider during init or dashboard setup.
 	}
 	for _, p := range c.Model.FallbackProviders {
 		switch p {

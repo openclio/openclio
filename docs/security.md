@@ -84,7 +84,7 @@ A personal AI agent has **full access to your computer**. These are the threats 
 ```yaml
 # config.yaml — stores the ENV VAR NAME, not the value
 model:
-  api_key_env: ANTHROPIC_API_KEY
+  api_key_env: OPENAI_API_KEY
 ```
 
 - Keys loaded from environment variables or `~/.openclio/.env` (permission: `0600`)

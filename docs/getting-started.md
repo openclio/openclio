@@ -24,30 +24,33 @@ cd agent && make build
 cp bin/openclio ~/.local/bin/
 ```
 
-## 2. Set Your API Key
+## 2. Run Setup Wizard and Choose Provider
 
 ```bash
-# Anthropic (recommended)
-export ANTHROPIC_API_KEY="sk-ant-..."
+openclio init
+```
 
-# Or OpenAI
-export OPENAI_API_KEY="sk-..."
+The wizard lets you choose `ollama`, `openai`, `anthropic`, or `gemini`.
+For cloud providers, it tells you which `*_API_KEY` env var to export.
 
-# Or use Ollama (free, local — no key needed)
+## 3. Set Credentials (if required)
+
+```bash
+# Example for Ollama (local, no cloud key needed)
 ollama pull llama3.2
 ```
 
 Add your export to `~/.bashrc` or `~/.zshrc` to persist it.
 
-## 3. Start Chatting
+## 4. Start Chatting
 
 ```bash
-agent
+openclio
 ```
 
 That's it. The agent creates `~/.openclio/config.yaml` on first run with sensible defaults.
 
-## 4. Configure (Optional)
+## 5. Configure (Optional)
 
 ```bash
 cat ~/.openclio/config.yaml
@@ -61,7 +64,7 @@ model:
   api_key_env: OPENAI_API_KEY
 ```
 
-## 5. Try Some Commands
+## 6. Try Some Commands
 
 Inside the chat:
 ```
@@ -73,7 +76,7 @@ Inside the chat:
 exit        — quit
 ```
 
-## 6. Start the Server (for Telegram / Web UI)
+## 7. Start the Server (for Telegram / Web UI)
 
 ```bash
 export TELEGRAM_BOT_TOKEN="..."

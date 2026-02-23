@@ -60,32 +60,32 @@ func runInit(dataDir string) {
 	fmt.Println()
 
 	fmt.Println("Which AI model provider?")
-	fmt.Println("  1) Anthropic Claude (recommended)")
+	fmt.Println("  1) Ollama (local, free, private)")
 	fmt.Println("  2) OpenAI GPT")
-	fmt.Println("  3) Google Gemini")
-	fmt.Println("  4) Ollama (local, free, private)")
-	providerChoice := promptChoice("Choose provider", []string{"1", "2", "3", "4"}, "1")
+	fmt.Println("  3) Anthropic Claude")
+	fmt.Println("  4) Google Gemini")
+	providerChoice := promptChoice("Choose provider (required)", []string{"1", "2", "3", "4"}, "")
 
 	var provider, defaultModel, apiKeyEnv, apiKeyHint string
 	switch providerChoice {
 	case "1":
-		provider = "anthropic"
-		defaultModel = "claude-sonnet-4-20250514"
-		apiKeyEnv = "ANTHROPIC_API_KEY"
-		apiKeyHint = "https://console.anthropic.com/settings/keys"
+		provider = "ollama"
+		defaultModel = "llama3.1"
 	case "2":
 		provider = "openai"
 		defaultModel = "gpt-4o-mini"
 		apiKeyEnv = "OPENAI_API_KEY"
 		apiKeyHint = "https://platform.openai.com/api-keys"
 	case "3":
+		provider = "anthropic"
+		defaultModel = "claude-sonnet-4-20250514"
+		apiKeyEnv = "ANTHROPIC_API_KEY"
+		apiKeyHint = "https://console.anthropic.com/settings/keys"
+	default:
 		provider = "gemini"
 		defaultModel = "gemini-1.5-flash"
 		apiKeyEnv = "GEMINI_API_KEY"
 		apiKeyHint = "https://aistudio.google.com/app/apikey"
-	default:
-		provider = "ollama"
-		defaultModel = "llama3.1"
 	}
 
 	fmt.Println()
@@ -246,19 +246,30 @@ func promptConfirm(label string, defaultYes bool) bool {
 }
 
 func promptChoice(label string, choices []string, defaultChoice string) string {
-	fmt.Printf("   %s [%s]: ", label, defaultChoice)
-	line, _ := initReader.ReadString('\n')
-	line = strings.TrimSpace(line)
-	if line == "" {
-		return defaultChoice
-	}
-	for _, c := range choices {
-		if line == c {
-			return c
+	allowed := strings.Join(choices, "/")
+	for {
+		if defaultChoice != "" {
+			fmt.Printf("   %s [%s]: ", label, defaultChoice)
+		} else {
+			fmt.Printf("   %s [%s]: ", label, allowed)
 		}
+
+		line, _ := initReader.ReadString('\n')
+		line = strings.TrimSpace(line)
+		if line == "" {
+			if defaultChoice != "" {
+				return defaultChoice
+			}
+			fmt.Printf("   Please choose one of: %s\n", allowed)
+			continue
+		}
+		for _, c := range choices {
+			if line == c {
+				return c
+			}
+		}
+		fmt.Printf("   Invalid choice '%s'. Enter one of: %s\n", line, allowed)
 	}
-	fmt.Printf("   Invalid choice '%s', using default '%s'\n", line, defaultChoice)
-	return defaultChoice
 }
 
 func promptMultiline(prefix string) string {

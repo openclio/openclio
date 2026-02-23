@@ -13,8 +13,8 @@ func TestDefaultConfig(t *testing.T) {
 	if cfg.Gateway.Port != 18789 {
 		t.Errorf("expected default port 18789, got %d", cfg.Gateway.Port)
 	}
-	if cfg.Model.Provider != "anthropic" {
-		t.Errorf("expected default provider anthropic, got %s", cfg.Model.Provider)
+	if cfg.Model.Provider != "" {
+		t.Errorf("expected default provider to be empty (setup mode), got %s", cfg.Model.Provider)
 	}
 	if cfg.Logging.Output != "~/.openclio/openclio.log" {
 		t.Errorf("expected default logging output ~/.openclio/openclio.log, got %s", cfg.Logging.Output)
@@ -147,8 +147,8 @@ func TestValidate(t *testing.T) {
 	cfg.Gateway.Port = 18789
 
 	cfg.Model.Provider = ""
-	if err := cfg.Validate(); err == nil {
-		t.Error("expected error for empty provider")
+	if err := cfg.Validate(); err != nil {
+		t.Errorf("empty provider should be valid in setup mode, got %v", err)
 	}
 	cfg.Model.Provider = "anthropic"
 

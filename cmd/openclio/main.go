@@ -351,16 +351,26 @@ func main() {
 		ws = workspace.Empty()
 	}
 
-	provider, err := buildProviderStack(cfg, log)
 	setupMode := false
-	if err != nil {
-		if isMissingAPIKeyError(err) {
-			setupMode = true
-			log.Warn("no provider API key found, starting in setup mode", "provider", cfg.Model.Provider, "api_key_env", cfg.Model.APIKeyEnv)
-			provider = nil
-		} else {
-			fmt.Fprintf(os.Stderr, "error: %v\nhint: set the %s environment variable\n", err, cfg.Model.APIKeyEnv)
-			os.Exit(1)
+	var provider agent.Provider
+	if strings.TrimSpace(cfg.Model.Provider) == "" {
+		setupMode = true
+		log.Warn("no model provider configured, starting in setup mode", "hint", "run `openclio init` and choose a provider")
+	} else {
+		provider, err = buildProviderStack(cfg, log)
+		if err != nil {
+			if isMissingAPIKeyError(err) {
+				setupMode = true
+				log.Warn("no provider API key found, starting in setup mode", "provider", cfg.Model.Provider, "api_key_env", cfg.Model.APIKeyEnv)
+				provider = nil
+			} else {
+				if strings.TrimSpace(cfg.Model.APIKeyEnv) != "" {
+					fmt.Fprintf(os.Stderr, "error: %v\nhint: set the %s environment variable\n", err, cfg.Model.APIKeyEnv)
+				} else {
+					fmt.Fprintf(os.Stderr, "error: %v\nhint: run `openclio init` and choose a provider/model\n", err)
+				}
+				os.Exit(1)
+			}
 		}
 	}
 

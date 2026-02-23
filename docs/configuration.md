@@ -5,9 +5,9 @@
 ```yaml
 # ── Model / Provider ──────────────────────────────────────────────────────────
 model:
-  provider:   anthropic          # anthropic | openai | gemini | ollama
-  model:      claude-sonnet-4-20250514
-  api_key_env: ANTHROPIC_API_KEY # name of env var holding your API key
+  provider:   ""                 # choose one: ollama | openai | anthropic | gemini
+  model:      ""                 # choose a model compatible with your provider
+  api_key_env: ""                # env var name for cloud providers; empty for ollama
   fallback_providers: []         # optional, e.g. [openai, ollama]
 
 # ── Embeddings ────────────────────────────────────────────────────────────────
@@ -109,9 +109,9 @@ logging:
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `provider` | string | `anthropic` | LLM provider: `anthropic`, `openai`, `gemini`, `ollama` |
-| `model` | string | `claude-sonnet-4-20250514` | Model name passed to the provider API |
-| `api_key_env` | string | `ANTHROPIC_API_KEY` | **Name** of the env var holding the API key (never the key itself) |
+| `provider` | string | `""` | LLM provider: `ollama`, `openai`, `anthropic`, `gemini` |
+| `model` | string | `""` | Model name passed to the provider API |
+| `api_key_env` | string | `""` | **Name** of the env var holding the API key (never the key itself) |
 | `fallback_providers` | []string | `[]` | Optional ordered failover providers |
 | `fallback_models` | map | `{}` | Optional per-provider model overrides for fallback providers |
 | `fallback_api_key_env` | map | `{}` | Optional per-provider API key env var names for fallback providers |

@@ -1,8 +1,8 @@
 # ── Model / Provider ──────────────────────────────────────────────────────────
 model:
-  provider:    anthropic
-  model:       claude-sonnet-4-20250514
-  api_key_env: ANTHROPIC_API_KEY
+  provider:    ""               # choose one: ollama | openai | anthropic | gemini
+  model:       ""               # choose a model compatible with your provider
+  api_key_env: ""               # required for cloud providers, empty for ollama
   fallback_providers: [] # e.g. [openai, ollama]
 
 # ── Heuristic Model Router ───────────────────────────────────────────────────

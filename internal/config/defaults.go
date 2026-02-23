@@ -10,9 +10,11 @@ func DefaultConfig() *Config {
 			Bind: "127.0.0.1", // loopback only — safe default
 		},
 		Model: ModelConfig{
-			Provider:  "anthropic",
-			Model:     "claude-sonnet-4-20250514",
-			APIKeyEnv: "ANTHROPIC_API_KEY",
+			// Intentionally empty by default.
+			// Users choose provider/model during `openclio init` or setup UI.
+			Provider:  "",
+			Model:     "",
+			APIKeyEnv: "",
 		},
 		ModelRouter: ModelRouterConfig{
 			Enabled:  false,

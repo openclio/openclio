@@ -19,9 +19,6 @@
 # Install
 curl -sSL https://raw.githubusercontent.com/openclio/openclio/main/install.sh | sh
 
-# Set an API key
-export ANTHROPIC_API_KEY="sk-ant-..."
-
 # First-time setup
 openclio init
 
@@ -132,10 +129,10 @@ Config file: `~/.openclio/config.yaml` (created automatically on first run)
 
 ```yaml
 model:
-  provider: anthropic          # anthropic | openai | gemini | ollama
-  model: claude-sonnet-4-20250514
-  api_key_env: ANTHROPIC_API_KEY
-  fallback_providers: [openai, ollama]
+  provider: ""                 # choose one: ollama | openai | anthropic | gemini
+  model: ""                    # choose a model for that provider
+  api_key_env: ""              # required for cloud providers; empty for ollama
+  fallback_providers: [anthropic, ollama]
 
 embeddings:
   provider: auto               # auto | openai | ollama
