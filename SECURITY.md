@@ -210,7 +210,7 @@ Each adapter:
 
 ## Vulnerability Reporting
 
-- Email: [TBD — security@yourproject.dev]
+- Open a [GitHub Security Advisory](https://github.com/openclio/openclio/security/advisories/new) (preferred)
 - Response time: 48 hours
 - Severity-based disclosure timeline (90 days for non-critical)
 - Credit given to reporters

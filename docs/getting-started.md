@@ -14,7 +14,7 @@ go install github.com/openclio/openclio/cmd/agent@latest
 
 Using the install script:
 ```bash
-curl -sSL https://raw.githubusercontent.com/user/agent/main/install.sh | sh
+curl -sSL https://raw.githubusercontent.com/openclio/openclio/main/install.sh | sh
 ```
 
 Or build from source:
