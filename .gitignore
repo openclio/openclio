@@ -1,0 +1,45 @@
+# Binaries
+bin/
+*.exe
+*.dll
+*.so
+*.dylib
+agent
+openclio
+openclio-*
+
+# Test
+*.test
+*.out
+coverage.html
+test-reports/
+.latest_test_report_dir
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Agent data (never commit user data)
+*.db
+*.db-wal
+*.db-shm
+.env
+
+# Go cache
+.gocache/
+
+# Real config (use config.example.yaml instead)
+config.yaml
+
+# Vendor (optional — uncomment if vendoring)
+# vendor/
+
+# ── Private planning & internal docs ──────────────────────────────────────────
+private/

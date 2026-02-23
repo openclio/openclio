@@ -1,0 +1,85 @@
+syntax = "proto3";
+
+// Package agent defines the gRPC service that the agent core exposes to
+// out-of-process channel adapters (Telegram, WhatsApp, Discord, etc.).
+//
+// Current status: DESIGN — v1 adapters run in-process using the plugin.Adapter
+// interface. This protobuf is the planned contract for v2 out-of-process adapters.
+// Generate Go code with `make proto`.
+package agent;
+
+option go_package = "github.com/openclio/openclio/internal/rpc/agentpb";
+
+// ─── Messages ────────────────────────────────────────────────────────────────
+
+// InboundMessage is a message received from a user via a channel adapter.
+message InboundMessage {
+  string adapter_name = 1;  // e.g. "telegram", "discord", "whatsapp"
+  string user_id      = 2;  // platform-specific user identifier
+  string chat_id      = 3;  // platform-specific chat / channel identifier
+  string text         = 4;  // message text
+  string request_id   = 5;  // optional idempotency key
+  int64  timestamp    = 6;  // unix timestamp (seconds)
+}
+
+// OutboundMessage is a message to be delivered to a user via a channel adapter.
+message OutboundMessage {
+  string adapter_name = 1;
+  string chat_id      = 2;
+  string text         = 3;
+  string request_id   = 4;  // echoed from InboundMessage if present
+}
+
+// Ack acknowledges receipt of a message.
+message Ack {
+  string request_id = 1;
+  bool   ok         = 2;
+  string error      = 3;  // non-empty if ok=false
+}
+
+// SendResult is returned after delivering an outbound message.
+message SendResult {
+  bool   ok    = 1;
+  string error = 2;
+}
+
+// HealthStatus reports whether the adapter is ready to receive messages.
+message HealthStatus {
+  bool   healthy = 1;
+  string message = 2;  // human-readable status or error
+}
+
+// Empty is used for parameterless requests.
+message Empty {}
+
+// ─── Service ─────────────────────────────────────────────────────────────────
+
+// ChannelAdapter is the gRPC service implemented by each out-of-process adapter.
+// The adapter acts as both CLIENT (sending inbound messages to core) and SERVER
+// (receiving outbound messages from core).
+//
+// In v2, the agent core will expose this service over a Unix socket or localhost
+// gRPC port that each adapter binary connects to on startup.
+service ChannelAdapter {
+  // SendMessage delivers an agent response to the user via the adapter.
+  rpc SendMessage(OutboundMessage) returns (SendResult);
+
+  // StreamMessages is a bidirectional stream: the adapter pushes InboundMessages
+  // and receives Acks; the core pushes OutboundMessages back on the same stream.
+  rpc StreamMessages(stream InboundMessage) returns (stream OutboundMessage);
+
+  // Health reports adapter readiness.
+  rpc Health(Empty) returns (HealthStatus);
+}
+
+// ─── Core service (future) ───────────────────────────────────────────────────
+
+// AgentCore is the gRPC service the agent core will expose to adapters.
+// Adapters call this to submit messages and receive streaming responses.
+service AgentCore {
+  // Chat submits a user message and streams back the agent's response.
+  rpc Chat(InboundMessage) returns (stream OutboundMessage);
+
+  // Health returns core readiness.
+  rpc Health(Empty) returns (HealthStatus);
+}

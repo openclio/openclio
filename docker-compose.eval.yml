@@ -1,0 +1,64 @@
+# Docker Compose for Evaluating openclio
+# 
+# Usage:
+#   docker-compose -f docker-compose.eval.yml up -d
+#   docker-compose -f docker-compose.eval.yml exec openclio openclio init
+#   docker-compose -f docker-compose.eval.yml exec openclio openclio chat
+#
+# Or for web UI:
+#   docker-compose -f docker-compose.eval.yml up -d
+#   open http://localhost:18789
+
+version: '3.8'
+
+services:
+  openclio:
+    image: openclio/openclio:latest
+    container_name: openclio-eval
+    ports:
+      - "18789:18789"
+    environment:
+      # Required: Set your API key
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      # Or use OpenAI
+      # - OPENAI_API_KEY=${OPENAI_API_KEY}
+      
+      # Optional: Pre-configure settings
+      - OPENCLIO_MODEL_PROVIDER=${OPENCLIO_MODEL_PROVIDER:-anthropic}
+      - OPENCLIO_MODEL=${OPENCLIO_MODEL:-claude-sonnet-4-20250514}
+    volumes:
+      # Persist data between restarts
+      - openclio-data:/root/.openclio
+      # Mount current directory for file operations
+      - .:/workspace
+    working_dir: /workspace
+    command: ["serve"]
+    healthcheck:
+      test: ["CMD", "openclio", "status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
+  # Optional: Try with Ollama for local models
+  ollama:
+    image: ollama/ollama:latest
+    container_name: openclio-ollama-eval
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+    # Uncomment to enable GPU support
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+    profiles:
+      - ollama  # Only start when explicitly requested
+
+volumes:
+  openclio-data:
+  ollama-data:

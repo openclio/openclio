@@ -1,0 +1,1675 @@
+openapi: 3.0.3
+
+info:
+  title: OpenClio API
+  version: "1.0.0"
+  description: |
+    REST + WebSocket API for OpenClio (local-first AI agent).
+    All endpoints require Bearer auth except `GET /api/v1/health`.
+  contact:
+    name: OpenClio
+    url: https://github.com/openclio/openclio
+  license:
+    name: MIT
+
+servers:
+  - url: http://localhost:18789
+    description: Default local gateway
+
+security:
+  - BearerAuth: []
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: opaque
+      description: |
+        Token stored at `~/.openclio/auth.token`.
+        Passed as `Authorization: Bearer <token>`.
+
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+          example: "session not found"
+
+    Session:
+      type: object
+      properties:
+        id: { type: string, example: "sess_abc123" }
+        channel: { type: string, example: "ws" }
+        sender_id: { type: string, example: "ws-user" }
+        created_at: { type: string, format: date-time }
+        last_active: { type: string, format: date-time }
+        metadata: { type: string, example: "{}" }
+        agent_profile_id: { type: string, nullable: true, example: "4bdb938f-ec47-4564-a173-ed4f89eb8a8f" }
+
+    Message:
+      type: object
+      properties:
+        id: { type: integer, format: int64, example: 42 }
+        session_id: { type: string, example: "sess_abc123" }
+        role:
+          type: string
+          enum: [user, assistant, tool_result, system]
+          example: assistant
+        content: { type: string }
+        summary:
+          type: string
+          nullable: true
+        tokens: { type: integer, example: 128 }
+        created_at: { type: string, format: date-time }
+
+    ConfigView:
+      type: object
+      properties:
+        model:
+          type: object
+          properties:
+            provider: { type: string, example: "anthropic" }
+            model: { type: string, example: "claude-sonnet-4-20250514" }
+            api_key_env: { type: string, example: "ANTHROPIC_API_KEY" }
+            base_url: { type: string, nullable: true }
+            name: { type: string, nullable: true }
+        gateway:
+          type: object
+          properties:
+            port: { type: integer, example: 18789 }
+            bind: { type: string, example: "127.0.0.1" }
+            grpc_port: { type: integer, example: 0 }
+        agent:
+          type: object
+          properties:
+            max_tool_iterations: { type: integer, example: 10 }
+            max_tokens_per_session: { type: integer, example: 0 }
+            max_tokens_per_day: { type: integer, example: 0 }
+        tools:
+          type: object
+          properties:
+            max_output_size: { type: integer, example: 102400 }
+            scrub_output: { type: boolean, example: true }
+            exec:
+              type: object
+              properties:
+                sandbox: { type: string, example: "none" }
+                docker_image: { type: string, example: "alpine:latest" }
+                network_access: { type: boolean, example: false }
+                require_confirmation: { type: boolean, example: false }
+                timeout_secs: { type: number, format: float, example: 30 }
+            browser:
+              type: object
+              properties:
+                enabled: { type: boolean, example: false }
+                chrome_path: { type: string, example: "" }
+                headless: { type: boolean, example: true }
+                timeout_secs: { type: number, format: float, example: 30 }
+        context:
+          type: object
+          properties:
+            max_tokens_per_call: { type: integer, example: 8000 }
+            history_retrieval_k: { type: integer, example: 10 }
+            proactive_compaction: { type: number, format: float, example: 0.5 }
+            compaction_keep_recent: { type: integer, example: 5 }
+            compaction_model: { type: string, example: "" }
+            tool_result_summary: { type: boolean, example: true }
+        logging:
+          type: object
+          properties:
+            level:
+              type: string
+              enum: [debug, info, warn, error]
+              example: info
+            output: { type: string, example: "~/.openclio/openclio.log" }
+        retention:
+          type: object
+          properties:
+            sessions_days: { type: integer, example: 0 }
+            messages_per_session: { type: integer, example: 0 }
+
+    ConfigUpdate:
+      type: object
+      description: Partial in-memory config update; values reset on restart.
+      properties:
+        model:
+          type: object
+          properties:
+            provider: { type: string }
+            model: { type: string }
+            base_url: { type: string }
+            name: { type: string }
+        logging:
+          type: object
+          properties:
+            level: { type: string, enum: [debug, info, warn, error] }
+            output: { type: string }
+        agent:
+          type: object
+          properties:
+            max_tool_iterations: { type: integer, minimum: 1, maximum: 100 }
+            max_tokens_per_session: { type: integer, minimum: 0 }
+            max_tokens_per_day: { type: integer, minimum: 0 }
+        tools:
+          type: object
+          properties:
+            max_output_size: { type: integer, minimum: 0 }
+            scrub_output: { type: boolean }
+            exec:
+              type: object
+              properties:
+                sandbox: { type: string }
+                docker_image: { type: string }
+                network_access: { type: boolean }
+                require_confirmation: { type: boolean }
+                timeout_secs: { type: number, format: float, minimum: 0 }
+            browser:
+              type: object
+              properties:
+                enabled: { type: boolean }
+                headless: { type: boolean }
+                chrome_path: { type: string }
+                timeout_secs: { type: number, format: float, minimum: 0 }
+        context:
+          type: object
+          properties:
+            max_tokens_per_call: { type: integer, minimum: 1 }
+            history_retrieval_k: { type: integer, minimum: 1 }
+            proactive_compaction: { type: number, format: float, minimum: 0, maximum: 1 }
+            compaction_keep_recent: { type: integer, minimum: 0 }
+            compaction_model: { type: string }
+            tool_result_summary: { type: boolean }
+        retention:
+          type: object
+          properties:
+            sessions_days: { type: integer, minimum: 0 }
+            messages_per_session: { type: integer, minimum: 0 }
+
+    SetupRequest:
+      type: object
+      required: [provider]
+      properties:
+        provider:
+          type: string
+          example: openai
+        model:
+          type: string
+          description: Required for `openai-compat`, optional for others.
+          example: gpt-4o-mini
+        api_key:
+          type: string
+          description: Required for hosted providers; not required for `ollama`/`lmstudio`.
+          example: sk-...
+        base_url:
+          type: string
+          description: Required for `openai-compat`.
+          example: https://api.example.com/v1
+        name:
+          type: string
+          description: Optional display name for `openai-compat`.
+          example: my-endpoint
+
+    SetupResponse:
+      type: object
+      properties:
+        ok: { type: boolean, example: true }
+        setup_required: { type: boolean, example: false }
+        provider: { type: string, example: openai }
+        model: { type: string, example: gpt-4o-mini }
+
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Unauthorized:
+      description: Missing or invalid Bearer token
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    RateLimited:
+      description: Rate limit exceeded
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    InternalError:
+      description: Internal server error
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    ServiceUnavailable:
+      description: Service unavailable (for example setup required)
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+
+paths:
+  /api/v1/health:
+    get:
+      operationId: getHealth
+      summary: Health check
+      description: Returns server health and setup status.
+      security: []
+      tags: [System]
+      responses:
+        "200":
+          description: Healthy response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: ok }
+                  time: { type: string, format: date-time }
+                  version: { type: string, example: dev }
+                  setup_required: { type: boolean, example: false }
+                  setup_reason: { type: string, example: provider not configured }
+
+  /metrics:
+    get:
+      operationId: getMetrics
+      summary: Prometheus metrics
+      tags: [System]
+      responses:
+        "200":
+          description: Prometheus text format
+          content:
+            text/plain:
+              schema:
+                type: string
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /api/v1/setup:
+    post:
+      operationId: setupProvider
+      summary: Configure provider and hot-reload runtime
+      description: |
+        Writes API key to `~/.openclio/.env` (0600) when applicable,
+        updates in-memory model config, and hot-reloads the provider.
+      tags: [Config]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SetupRequest" }
+      responses:
+        "200":
+          description: Setup completed
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SetupResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  /api/v1/config:
+    get:
+      operationId: getConfig
+      summary: Get sanitized runtime config
+      tags: [Config]
+      responses:
+        "200":
+          description: Runtime config
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConfigView" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+    put:
+      operationId: updateConfig
+      summary: Update mutable config fields (in-memory)
+      tags: [Config]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ConfigUpdate" }
+      responses:
+        "200":
+          description: Updated field list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  updated:
+                    type: array
+                    items: { type: string }
+                  note: { type: string }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /api/v1/chat:
+    post:
+      operationId: chat
+      summary: Send a message to the agent
+      tags: [Chat]
+      parameters:
+        - name: stream
+          in: query
+          required: false
+          schema: { type: boolean }
+          description: When true, response is Server-Sent Events stream.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [message]
+              properties:
+                message:
+                  type: string
+                  example: "Summarize this repository."
+                session_id:
+                  type: string
+                  example: "sess_abc123"
+      responses:
+        "200":
+          description: Chat response (JSON or SSE)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  response: { type: string }
+                  session_id: { type: string }
+                  usage:
+                    type: object
+                    properties:
+                      input_tokens: { type: integer }
+                      output_tokens: { type: integer }
+                      llm_calls: { type: integer }
+                  tools_used:
+                    type: array
+                    items: { type: string }
+                  iterations: { type: integer }
+                  duration_ms: { type: integer }
+            text/event-stream:
+              schema:
+                type: string
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /api/v1/chat/abort:
+    post:
+      operationId: abortChatRun
+      summary: Abort an active chat run for a session
+      tags: [Chat]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [session_id]
+              properties:
+                session_id:
+                  type: string
+                  example: "sess_abc123"
+      responses:
+        "200":
+          description: Active run aborted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  aborted: { type: boolean }
+                  session_id: { type: string }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/v1/chat/inject:
+    post:
+      operationId: injectChatMessage
+      summary: Inject a message into an existing session history
+      tags: [Chat]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [session_id, role, content]
+              properties:
+                session_id:
+                  type: string
+                  example: "sess_abc123"
+                role:
+                  type: string
+                  enum: [user, assistant, system, tool_result]
+                  example: system
+                content:
+                  type: string
+                  example: "Manual system note"
+      responses:
+        "200":
+          description: Message inserted into session
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  message: { $ref: "#/components/schemas/Message" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/v1/sessions:
+    get:
+      operationId: listSessions
+      summary: List recent sessions
+      tags: [Sessions]
+      responses:
+        "200":
+          description: Session list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sessions:
+                    type: array
+                    items: { $ref: "#/components/schemas/Session" }
+                  count: { type: integer }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /api/v1/sessions/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      operationId: getSession
+      summary: Get one session with messages
+      tags: [Sessions]
+      responses:
+        "200":
+          description: Session details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  session: { $ref: "#/components/schemas/Session" }
+                  messages:
+                    type: array
+                    items: { $ref: "#/components/schemas/Message" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      operationId: deleteSession
+      summary: Delete a session and its messages
+      tags: [Sessions]
+      responses:
+        "200":
+          description: Deletion result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  deleted:
+                    type: string
+                    example: "sess_abc123"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/v1/sessions/{id}/stats:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      operationId: getSessionStats
+      summary: Get aggregated stats for one session
+      tags: [Sessions]
+      responses:
+        "200":
+          description: Session stats payload
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  session_id: { type: string }
+                  counts:
+                    type: object
+                    properties:
+                      messages: { type: integer }
+                      tokens: { type: integer }
+                      by_role:
+                        type: object
+                        additionalProperties:
+                          type: integer
+                  last_message_at:
+                    type: string
+                    format: date-time
+                    nullable: true
+                  created_at: { type: string, format: date-time }
+                  last_active: { type: string, format: date-time }
+                  overrides:
+                    type: object
+                    additionalProperties: true
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/v1/sessions/{id}/overrides:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      operationId: getSessionOverrides
+      summary: Get runtime overrides for one session
+      tags: [Sessions]
+      responses:
+        "200":
+          description: Session overrides
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  session_id: { type: string }
+                  overrides:
+                    type: object
+                    additionalProperties: true
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      operationId: updateSessionOverrides
+      summary: Persist runtime overrides for one session
+      tags: [Sessions]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [overrides]
+              properties:
+                overrides:
+                  type: object
+                  additionalProperties: true
+      responses:
+        "200":
+          description: Updated overrides
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  session_id: { type: string }
+                  overrides:
+                    type: object
+                    additionalProperties: true
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/v1/sessions/{id}/agent:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      operationId: getSessionAgentProfile
+      summary: Get agent profile binding for one session
+      tags: [Sessions]
+      responses:
+        "200":
+          description: Session agent binding
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  session_id: { type: string }
+                  agent_profile_id: { type: string, nullable: true }
+                  profile:
+                    type: object
+                    nullable: true
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      operationId: updateSessionAgentProfile
+      summary: Bind or clear an agent profile for one session
+      tags: [Sessions]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [agent_profile_id]
+              properties:
+                agent_profile_id:
+                  type: string
+                  nullable: true
+                  description: Use empty string to clear binding.
+      responses:
+        "200":
+          description: Updated session binding
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  session_id: { type: string }
+                  agent_profile_id: { type: string, nullable: true }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/v1/overview:
+    get:
+      operationId: getOverview
+      summary: Dashboard summary
+      tags: [Dashboard]
+      responses:
+        "200":
+          description: Overview payload
+          content:
+            application/json:
+              schema:
+                type: object
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /api/v1/agents:
+    get:
+      operationId: listAgentProfiles
+      summary: List persisted agent profiles
+      tags: [Agents]
+      responses:
+        "200":
+          description: Agent profiles
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  profiles:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string }
+                        name: { type: string }
+                        description: { type: string }
+                        provider: { type: string }
+                        model: { type: string }
+                        system_prompt: { type: string }
+                        is_active: { type: boolean }
+                        created_at: { type: string, format: date-time }
+                        updated_at: { type: string, format: date-time }
+                  count: { type: integer }
+                  active_id: { type: string, nullable: true }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+    post:
+      operationId: createAgentProfile
+      summary: Create a new agent profile
+      tags: [Agents]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string, example: "researcher" }
+                description: { type: string, example: "Research focused profile" }
+                provider: { type: string, example: "anthropic" }
+                model: { type: string, example: "claude-sonnet-4-20250514" }
+                system_prompt: { type: string }
+                is_active: { type: boolean, default: false }
+      responses:
+        "200":
+          description: Created profile
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  profile:
+                    type: object
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "409":
+          description: Conflict (duplicate profile name)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  /api/v1/agents/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+    put:
+      operationId: updateAgentProfile
+      summary: Update an agent profile
+      tags: [Agents]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                description: { type: string }
+                provider: { type: string }
+                model: { type: string }
+                system_prompt: { type: string }
+                is_active: { type: boolean, description: Set true to activate this profile. }
+      responses:
+        "200":
+          description: Updated profile
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  profile:
+                    type: object
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: Conflict (duplicate profile name)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+    delete:
+      operationId: deleteAgentProfile
+      summary: Delete an agent profile
+      tags: [Agents]
+      responses:
+        "200":
+          description: Deleted profile
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  deleted: { type: string }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  /api/v1/agents/{id}/activate:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      operationId: activateAgentProfile
+      summary: Activate one agent profile
+      tags: [Agents]
+      responses:
+        "200":
+          description: Active profile changed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  profile:
+                    type: object
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  /api/v1/channels:
+    get:
+      operationId: getChannels
+      summary: Channel runtime and allowlist status
+      tags: [Dashboard]
+      responses:
+        "200":
+          description: Channel status payload
+          content:
+            application/json:
+              schema:
+                type: object
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /api/v1/channels/action:
+    post:
+      operationId: channelAction
+      summary: Execute a channel control action
+      description: |
+        Runtime control hook for channel adapters.
+        `ping` and `refresh` are implemented.
+        `restart`, `connect`, and `disconnect` currently return 501.
+      tags: [Dashboard]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, action]
+              properties:
+                name:
+                  type: string
+                  example: telegram
+                action:
+                  type: string
+                  enum: [ping, refresh, restart, connect, disconnect]
+                  example: refresh
+      responses:
+        "200":
+          description: Action acknowledged
+          content:
+            application/json:
+              schema:
+                type: object
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "501":
+          description: Action is not implemented
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /api/v1/channels/allowlist:
+    get:
+      operationId: getChannelAllowlist
+      summary: List approved sender identities for channel strict mode
+      tags: [Dashboard]
+      responses:
+        "200":
+          description: Allowlist snapshot
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  allow_all: { type: boolean }
+                  count: { type: integer }
+                  entries:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        adapter: { type: string }
+                        user_id: { type: string }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+    put:
+      operationId: updateChannelAllowlistMode
+      summary: Toggle channel strict mode at runtime
+      tags: [Dashboard]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [allow_all]
+              properties:
+                allow_all: { type: boolean }
+      responses:
+        "200":
+          description: Mode updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  allow_all: { type: boolean }
+                  count: { type: integer }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  /api/v1/channels/allowlist/approve:
+    post:
+      operationId: approveChannelSender
+      summary: Approve one sender identity for strict allowlist mode
+      tags: [Dashboard]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [adapter, user_id]
+              properties:
+                adapter: { type: string, example: telegram }
+                user_id: { type: string, example: "12345" }
+      responses:
+        "200":
+          description: Identity approved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  adapter: { type: string }
+                  user_id: { type: string }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  /api/v1/channels/allowlist/revoke:
+    post:
+      operationId: revokeChannelSender
+      summary: Revoke one sender identity from strict allowlist mode
+      tags: [Dashboard]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [adapter, user_id]
+              properties:
+                adapter: { type: string, example: telegram }
+                user_id: { type: string, example: "12345" }
+      responses:
+        "200":
+          description: Identity revoked
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  adapter: { type: string }
+                  user_id: { type: string }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  /api/v1/instances:
+    get:
+      operationId: getInstances
+      summary: Runtime instance info
+      tags: [Dashboard]
+      responses:
+        "200":
+          description: Instance list
+          content:
+            application/json:
+              schema:
+                type: object
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /api/v1/instances/action:
+    post:
+      operationId: instanceAction
+      summary: Execute a local instance control action
+      description: Supports `ping` and `refresh`.
+      tags: [Dashboard]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action]
+              properties:
+                id:
+                  type: string
+                  nullable: true
+                  description: Reserved for future multi-instance routing.
+                action:
+                  type: string
+                  enum: [ping, refresh]
+                  example: ping
+      responses:
+        "200":
+          description: Action result
+          content:
+            application/json:
+              schema:
+                type: object
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /api/v1/cron/jobs:
+    get:
+      operationId: listCronJobs
+      summary: List cron jobs
+      tags: [Cron]
+      responses:
+        "200":
+          description: Job list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  jobs:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: integer, format: int64, nullable: true }
+                        name: { type: string }
+                        schedule: { type: string }
+                        channel: { type: string, nullable: true }
+                        session_mode: { type: string, enum: [isolated, shared] }
+                        source: { type: string, enum: [config, db] }
+                        enabled: { type: boolean }
+                        last_run: { type: string, format: date-time, nullable: true }
+                        next_run: { type: string, format: date-time, nullable: true }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+    post:
+      operationId: createCronJob
+      summary: Create a persisted cron job and hot-load it
+      description: Creates a DB-backed cron job (source `db`) without restart.
+      tags: [Cron]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, schedule, prompt]
+              properties:
+                name: { type: string, example: "daily-summary" }
+                schedule: { type: string, example: "0 9 * * *" }
+                prompt: { type: string, example: "Summarize project updates." }
+                channel: { type: string, example: "webchat" }
+                session_mode: { type: string, enum: [isolated, shared], default: isolated }
+                enabled: { type: boolean, default: true }
+      responses:
+        "200":
+          description: Cron job created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  job:
+                    type: object
+                    properties:
+                      id: { type: integer, format: int64, nullable: true }
+                      name: { type: string }
+                      schedule: { type: string }
+                      channel: { type: string, nullable: true }
+                      session_mode: { type: string, enum: [isolated, shared] }
+                      source: { type: string, enum: [config, db] }
+                      enabled: { type: boolean }
+                      last_run: { type: string, format: date-time, nullable: true }
+                      next_run: { type: string, format: date-time, nullable: true }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "409":
+          description: Conflict (duplicate name or read-only config job)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /api/v1/cron/jobs/{name}:
+    parameters:
+      - name: name
+        in: path
+        required: true
+        schema: { type: string }
+    put:
+      operationId: updateCronJob
+      summary: Update one persisted cron job and hot-reload it
+      tags: [Cron]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                schedule: { type: string, example: "0 * * * *" }
+                prompt: { type: string, example: "Updated prompt text." }
+                channel: { type: string, example: "telegram" }
+                session_mode: { type: string, enum: [isolated, shared] }
+      responses:
+        "200":
+          description: Cron job updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  job: { type: object }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: Conflict (read-only config job)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+    delete:
+      operationId: deleteCronJob
+      summary: Delete one persisted cron job
+      tags: [Cron]
+      responses:
+        "200":
+          description: Cron job deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  deleted: { type: string }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: Conflict (read-only config job)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /api/v1/cron/jobs/{name}/enabled:
+    parameters:
+      - name: name
+        in: path
+        required: true
+        schema: { type: string }
+    put:
+      operationId: setCronJobEnabled
+      summary: Enable or disable one persisted cron job
+      tags: [Cron]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [enabled]
+              properties:
+                enabled: { type: boolean }
+      responses:
+        "200":
+          description: Cron job enable state updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  job: { type: object }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: Conflict (read-only config job)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /api/v1/cron/history:
+    get:
+      operationId: getCronHistory
+      summary: Get recent cron history
+      tags: [Cron]
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 20
+      responses:
+        "200":
+          description: History rows
+          content:
+            application/json:
+              schema:
+                type: object
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /api/v1/cron/run:
+    post:
+      operationId: runCronJob
+      summary: Trigger one cron job immediately
+      tags: [Cron]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string, example: "daily-summary" }
+      responses:
+        "200":
+          description: Trigger accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  job: { type: string }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+
+  /api/v1/skills:
+    get:
+      operationId: listSkills
+      summary: List local skills
+      tags: [Dashboard]
+      responses:
+        "200":
+          description: Skills list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  skills:
+                    type: array
+                    items: { type: string }
+                  entries:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        name: { type: string }
+                        enabled: { type: boolean }
+                        path: { type: string }
+                        updated_at: { type: string, format: date-time }
+                  count: { type: integer }
+                  enabled_count: { type: integer }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+    post:
+      operationId: installSkill
+      summary: Install or overwrite one local skill
+      tags: [Dashboard]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string, example: "ops" }
+                content: { type: string, example: "# Ops\nRunbooks" }
+                enabled: { type: boolean, default: true }
+      responses:
+        "200":
+          description: Skill installed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  name: { type: string }
+                  state: { type: string, enum: [enabled, disabled] }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /api/v1/skills/{name}:
+    parameters:
+      - name: name
+        in: path
+        required: true
+        schema: { type: string }
+    delete:
+      operationId: deleteSkill
+      summary: Delete one local skill
+      tags: [Dashboard]
+      responses:
+        "200":
+          description: Skill deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  deleted: { type: string }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/v1/skills/{name}/enable:
+    parameters:
+      - name: name
+        in: path
+        required: true
+        schema: { type: string }
+    put:
+      operationId: enableSkill
+      summary: Enable one local skill
+      tags: [Dashboard]
+      responses:
+        "200":
+          description: Skill enabled
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  name: { type: string }
+                  enabled: { type: boolean }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/v1/skills/{name}/disable:
+    parameters:
+      - name: name
+        in: path
+        required: true
+        schema: { type: string }
+    put:
+      operationId: disableSkill
+      summary: Disable one local skill
+      tags: [Dashboard]
+      responses:
+        "200":
+          description: Skill disabled
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  name: { type: string }
+                  enabled: { type: boolean }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/v1/nodes:
+    get:
+      operationId: getNodes
+      summary: MCP server and tool inventory
+      tags: [Dashboard]
+      responses:
+        "200":
+          description: Node inventory
+          content:
+            application/json:
+              schema:
+                type: object
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /api/v1/nodes/action:
+    post:
+      operationId: nodeAction
+      summary: Execute a node control action
+      tags: [Dashboard]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, action]
+              properties:
+                name: { type: string, example: "localfs" }
+                action: { type: string, enum: [capabilities, test, restart] }
+      responses:
+        "200":
+          description: Action result
+          content:
+            application/json:
+              schema:
+                type: object
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "501":
+          description: Node action not implemented
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /api/v1/debug:
+    get:
+      operationId: getDebug
+      summary: Runtime debug diagnostics
+      tags: [Dashboard]
+      responses:
+        "200":
+          description: Debug payload
+          content:
+            application/json:
+              schema:
+                type: object
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /api/v1/debug/action:
+    post:
+      operationId: debugAction
+      summary: Execute a runtime debug action
+      tags: [Dashboard]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action]
+              properties:
+                action: { type: string, enum: [ping, gc, stack_dump] }
+      responses:
+        "200":
+          description: Action result
+          content:
+            application/json:
+              schema:
+                type: object
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /api/v1/debug/events:
+    get:
+      operationId: getDebugEvents
+      summary: List recent debug/action events
+      tags: [Dashboard]
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 100
+      responses:
+        "200":
+          description: Events list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  events:
+                    type: array
+                    items: { type: object }
+                  count: { type: integer }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /api/v1/logs:
+    get:
+      operationId: getLogs
+      summary: Tail recent lines from configured log file
+      tags: [Dashboard]
+      parameters:
+        - name: lines
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 10
+            maximum: 2000
+            default: 200
+        - name: contains
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: level
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [debug, info, warn, error]
+      responses:
+        "200":
+          description: Log lines
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  path: { type: string }
+                  lines_requested: { type: integer }
+                  lines_returned: { type: integer }
+                  contains: { type: string }
+                  level: { type: string }
+                  lines:
+                    type: array
+                    items: { type: string }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /api/v1/logs/export:
+    get:
+      operationId: exportLogs
+      summary: Export filtered log lines as text or json
+      tags: [Dashboard]
+      parameters:
+        - name: lines
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 10
+            maximum: 10000
+            default: 500
+        - name: contains
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: level
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [debug, info, warn, error]
+        - name: format
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [text, json]
+            default: text
+      responses:
+        "200":
+          description: Export payload (text/plain for `format=text`, JSON for `format=json`)
+          content:
+            text/plain:
+              schema:
+                type: string
+            application/json:
+              schema:
+                type: object
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /api/v1/docs/openapi:
+    get:
+      operationId: getOpenAPISpec
+      summary: Return the OpenAPI YAML document
+      tags: [Docs]
+      responses:
+        "200":
+          description: OpenAPI YAML
+          content:
+            application/yaml:
+              schema:
+                type: string
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /ws:
+    get:
+      operationId: connectWebSocket
+      summary: WebSocket chat connection
+      description: |
+        Upgrade to WebSocket for streaming chat.
+
+        Client message types:
+        - Chat: `{"type":"chat","message":"hello","session_id":"optional"}`
+        - Ping: `{"type":"ping"}`
+        - Abort active run: `{"type":"abort","session_id":"sess_abc123"}`
+        - Inject message: `{"type":"inject","session_id":"sess_abc123","role":"system","content":"manual note"}`
+
+        Server message types:
+        `session`, `token`, `tool_use`, `response`, `error`, `pong`, `control`.
+      tags: [Chat]
+      responses:
+        "101":
+          description: Switching Protocols
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+tags:
+  - name: System
+    description: Health and metrics
+  - name: Chat
+    description: REST and WebSocket chat
+  - name: Sessions
+    description: Session retrieval, deletion, statistics, and runtime overrides
+  - name: Config
+    description: Setup and runtime configuration
+  - name: Dashboard
+    description: Operational dashboard endpoints
+  - name: Agents
+    description: Agent profiles and activation controls
+  - name: Cron
+    description: Cron scheduler endpoints
+  - name: Docs
+    description: API documentation

@@ -1,0 +1,12 @@
+{
+  "benchmark": "phase2-token-efficiency",
+  "generated_at": "",
+  "source": "populate from equivalent OpenClaw runs",
+  "tasks": [],
+  "long_session_growth": [],
+  "totals": {
+    "input_tokens": 0,
+    "output_tokens": 0,
+    "cost_usd": 0.0
+  }
+}

@@ -1,0 +1,58 @@
+{
+  "generated_at": "2026-02-23T21:45:26.379888",
+  "agent": "openclio",
+  "version": "dev",
+  "status": "VERIFIED_AND_EXCEEDED",
+  "summary": {
+    "best_multiplier": 13.36,
+    "best_savings_pct": 92.5,
+    "tokenizer": "tiktoken-go (cl100k_base)",
+    "test_count": 3
+  },
+  "results": [
+    {
+      "turns": 10,
+      "baseline_tokens": 5126,
+      "our_tokens": 922,
+      "savings_pct": 82.0,
+      "multiplier": 5.56,
+      "claimed_multiplier": 1.7,
+      "status": "EXCEEDED"
+    },
+    {
+      "turns": 25,
+      "baseline_tokens": 8318,
+      "our_tokens": 1004,
+      "savings_pct": 87.9,
+      "multiplier": 8.28,
+      "claimed_multiplier": 3.8,
+      "status": "EXCEEDED"
+    },
+    {
+      "turns": 50,
+      "baseline_tokens": 13626,
+      "our_tokens": 1020,
+      "savings_pct": 92.5,
+      "multiplier": 13.36,
+      "claimed_multiplier": 7.2,
+      "status": "EXCEEDED"
+    }
+  ],
+  "comparisons": {
+    "claude_code": {
+      "tokens_per_task": 397000,
+      "our_estimated": 10200,
+      "advantage": "38.9x"
+    },
+    "aider": {
+      "tokens_per_task": 126000,
+      "our_estimated": 10200,
+      "advantage": "12.4x"
+    },
+    "swe_agent": {
+      "tokens_per_task": 450000,
+      "our_estimated": 10200,
+      "advantage": "44.1x"
+    }
+  }
+}

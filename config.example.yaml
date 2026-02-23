@@ -1,0 +1,107 @@
+# ── Model / Provider ──────────────────────────────────────────────────────────
+model:
+  provider:    anthropic
+  model:       claude-sonnet-4-20250514
+  api_key_env: ANTHROPIC_API_KEY
+  fallback_providers: [] # e.g. [openai, ollama]
+
+# ── Heuristic Model Router ───────────────────────────────────────────────────
+model_router:
+  enabled: false
+  strategy: cost_optimized      # cost_optimized | quality_first | speed_first | privacy_first
+  cheap_model: ""               # optional explicit tier mapping
+  mid_model: ""
+  expensive_model: ""
+  privacy_model: ""             # used by privacy_first strategy when set
+
+# ── Embeddings ────────────────────────────────────────────────────────────────
+embeddings:
+  provider: auto               # auto | openai | ollama
+  model: nomic-embed-text
+  api_key_env: OPENAI_API_KEY
+  base_url: http://localhost:11434
+
+# ── Gateway (HTTP + WebSocket server) ─────────────────────────────────────────
+gateway:
+  port: 18789
+  bind: 127.0.0.1
+
+# ── Context Engine ────────────────────────────────────────────────────────────
+context:
+  max_tokens_per_call:  8000
+  history_retrieval_k:  10
+  proactive_compaction: 0.5
+  compaction_keep_recent: 5
+  compaction_model: ""
+  tool_result_summary:  true
+
+# ── Agent Loop ────────────────────────────────────────────────────────────────
+agent:
+  max_tool_iterations: 10        # max LLM ↔ tool round-trips per message
+  delegation:
+    enabled: false
+    max_parallel_sub_agents: 5
+    sub_agent_model: ""          # optional override; defaults to active model
+    synthesis_model: ""          # optional override; defaults to active model
+    timeout: 90s
+
+# ── Tools ─────────────────────────────────────────────────────────────────────
+tools:
+  max_output_size: 102400        # 100 KB — truncates shell command output
+  exec:
+    sandbox: none
+    timeout: 30s
+    docker_image: alpine:latest
+    network_access: false
+    require_confirmation: false
+  browser:
+    enabled: false
+    chrome_path: ""              # auto-detect if empty
+    headless: true
+    timeout: 30s
+
+# ── MCP Servers (optional, stdio) ────────────────────────────────────────────
+# mcp_servers:
+#   - name: filesystem
+#     command: npx
+#     args: ["-y", "@modelcontextprotocol/server-filesystem", "."]
+#   - name: github
+#     command: npx
+#     args: ["-y", "@modelcontextprotocol/server-github"]
+#     env:
+#       GITHUB_TOKEN: GITHUB_TOKEN   # env var name
+
+# ── CLI (interactive terminal) ────────────────────────────────────────────────
+cli:
+  scanner_buffer: 65536          # 64 KB line scanner buffer
+
+# ── Channel Adapters ──────────────────────────────────────────────────────────
+channels:
+  allow_all: true
+
+  # telegram:
+  #   token_env: TELEGRAM_BOT_TOKEN
+
+  # discord:
+  #   token_env: DISCORD_BOT_TOKEN
+  #   app_id_env: DISCORD_APP_ID
+
+  # whatsapp:
+  #   enabled: false
+  #   # data_dir: ~/.openclio
+  #   # Uses QR login via WhatsApp Linked Devices.
+  #   # token_env / webhook_url are reserved for a future Cloud API mode and are ignored today.
+
+# ── Scheduled Tasks (Cron) ────────────────────────────────────────────────────
+# cron:
+#   - name: daily-summary
+#     schedule: "0 9 * * *"
+#     # trigger: "every 6 hours"   # optional event-driven watch trigger (use schedule OR trigger)
+#     prompt: "Give me a brief summary of what I should focus on today."
+#     channel: telegram
+#     session_mode: isolated      # isolated | shared (default: isolated)
+
+# ── Logging ───────────────────────────────────────────────────────────────────
+logging:
+  level:  info
+  output: stderr

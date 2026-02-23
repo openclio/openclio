@@ -1,0 +1,47 @@
+# openclio Docker Distribution
+# Multi-stage build for minimal image size
+
+# Build stage (this happens in your private CI)
+FROM golang:1.25-alpine AS builder
+
+WORKDIR /build
+
+# Copy source (in private CI, this is your actual source)
+COPY . .
+
+ARG VERSION=dev
+ARG COMMIT=unknown
+ARG BUILD_TIME
+
+# Build static binary
+RUN CGO_ENABLED=0 GOOS=linux go build \
+    -ldflags "-s -w \
+        -X main.version=${VERSION} \
+        -X main.commit=${COMMIT} \
+        -X main.buildTime=${BUILD_TIME}" \
+    -a -installsuffix cgo \
+    -o openclio \
+    ./cmd/openclio
+
+# Runtime stage (minimal, source not included)
+FROM alpine:3.19
+
+RUN apk --no-cache add ca-certificates git
+
+WORKDIR /root/
+
+# Copy only the binary from builder
+COPY --from=builder /build/openclio /usr/local/bin/openclio
+
+# Create data directory
+RUN mkdir -p /root/.openclio
+
+# Set environment
+ENV OPENCLIO_DATA_DIR=/root/.openclio
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD openclio status || exit 1
+
+# Default command shows help
+CMD ["openclio", "--help"]

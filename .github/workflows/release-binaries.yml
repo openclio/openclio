@@ -1,0 +1,203 @@
+# Build and release openclio binaries
+# This workflow builds cross-platform binaries and uploads them to the distribution repo
+name: Release Binaries
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+env:
+  DISTRIBUTION_REPO: openclio/distribution
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          # Linux
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+          # macOS
+          - goos: darwin
+            goarch: amd64
+          - goos: darwin
+            goarch: arm64
+          # Windows
+          - goos: windows
+            goarch: amd64
+            extension: .exe
+          - goos: windows
+            goarch: arm64
+            extension: .exe
+
+    steps:
+    - name: Checkout source (private repo)
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.25'
+
+    - name: Build binary
+      env:
+        GOOS: ${{ matrix.goos }}
+        GOARCH: ${{ matrix.goarch }}
+        CGO_ENABLED: 0
+      run: |
+        VERSION=${GITHUB_REF#refs/tags/}
+        OUTPUT="openclio-${VERSION}-${GOOS}-${GOARCH}${{ matrix.extension }}"
+        
+        go build -ldflags "-s -w \
+          -X main.version=${VERSION} \
+          -X main.buildTime=$(date -u +%Y-%m-%dT%H:%M:%SZ) \
+          -X main.commit=${GITHUB_SHA::7}" \
+          -o "dist/${OUTPUT}" \
+          ./cmd/openclio
+        
+        # Create archive
+        cd dist
+        if [ "$GOOS" = "windows" ]; then
+          zip "${OUTPUT}.zip" "$OUTPUT"
+          echo "ARCHIVE=${OUTPUT}.zip" >> $GITHUB_ENV
+        else
+          tar -czf "${OUTPUT}.tar.gz" "$OUTPUT"
+          echo "ARCHIVE=${OUTPUT}.tar.gz" >> $GITHUB_ENV
+        fi
+
+    - name: Generate checksum
+      run: |
+        cd dist
+        sha256sum "$ARCHIVE" >> checksums.txt
+
+    - name: Upload to distribution repo
+      uses: actions/github-script@v7
+      with:
+        github-token: ${{ secrets.DISTRIBUTION_TOKEN }}
+        script: |
+          const fs = require('fs');
+          const path = require('path');
+          
+          const tag = context.ref.replace('refs/tags/', '');
+          const archive = process.env.ARCHIVE;
+          const assetPath = path.join('dist', archive);
+          
+          // Get or create release in distribution repo
+          let release;
+          try {
+            release = await github.rest.repos.getReleaseByTag({
+              owner: 'openclio',
+              repo: 'distribution',
+              tag: tag
+            });
+          } catch (e) {
+            release = await github.rest.repos.createRelease({
+              owner: 'openclio',
+              repo: 'distribution',
+              tag_name: tag,
+              name: `openclio ${tag}`,
+              body: `Binary release for ${tag}\n\nSee [CHANGELOG](https://github.com/openclio/openclio-private/blob/main/CHANGELOG.md) for details.`
+            });
+          }
+          
+          // Upload asset
+          await github.rest.repos.uploadReleaseAsset({
+            owner: 'openclio',
+            repo: 'distribution',
+            release_id: release.data.id,
+            name: archive,
+            data: fs.readFileSync(assetPath)
+          });
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Login to Docker Hub
+      uses: docker/login-action@v3
+      with:
+        username: ${{ secrets.DOCKER_USERNAME }}
+        password: ${{ secrets.DOCKER_PASSWORD }}
+
+    - name: Build and push
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        platforms: linux/amd64,linux/arm64
+        push: true
+        tags: |
+          openclio/openclio:${{ github.ref_name }}
+          openclio/openclio:latest
+        build-args: |
+          VERSION=${{ github.ref_name }}
+          COMMIT=${{ github.sha }}
+
+  update-homebrew:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+    - name: Update Homebrew formula
+      uses: actions/github-script@v7
+      with:
+        github-token: ${{ secrets.DISTRIBUTION_TOKEN }}
+        script: |
+          const tag = context.ref.replace('refs/tags/', '');
+          
+          // Calculate SHA256 for each platform
+          // This would download the built binaries and calculate hashes
+          
+          // Update formula in distribution repo
+          await github.rest.repos.createOrUpdateFileContents({
+            owner: 'openclio',
+            repo: 'distribution',
+            path: 'Formula/openclio.rb',
+            message: `Update formula for ${tag}`,
+            content: Buffer.from(`class Openclio < Formula
+            desc "Local-first Personal AI Agent"
+            homepage "https://openclio.dev"
+            version "${tag.replace('v', '')}"
+            
+            on_macos do
+              if Hardware::CPU.arm?
+                url "https://github.com/openclio/distribution/releases/download/${tag}/openclio-${tag}-darwin-arm64.tar.gz"
+                sha256 "PLACEHOLDER_SHA256_ARM64"
+              else
+                url "https://github.com/openclio/distribution/releases/download/${tag}/openclio-${tag}-darwin-amd64.tar.gz"
+                sha256 "PLACEHOLDER_SHA256_AMD64"
+              end
+            end
+            
+            on_linux do
+              if Hardware::CPU.arm?
+                url "https://github.com/openclio/distribution/releases/download/${tag}/openclio-${tag}-linux-arm64.tar.gz"
+                sha256 "PLACEHOLDER_SHA256_LINUX_ARM64"
+              else
+                url "https://github.com/openclio/distribution/releases/download/${tag}/openclio-${tag}-linux-amd64.tar.gz"
+                sha256 "PLACEHOLDER_SHA256_LINUX_AMD64"
+              end
+            end
+            
+            def install
+              bin.install "openclio"
+            end
+            
+            test do
+              system "#{bin}/openclio", "version"
+            end
+          end`).toString('base64'),
+            sha: await github.rest.repos.getContent({
+              owner: 'openclio',
+              repo: 'distribution',
+              path: 'Formula/openclio.rb'
+            }).then(r => r.data.sha).catch(() => undefined)
+          });
