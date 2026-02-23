@@ -186,6 +186,9 @@ func (r *Registry) Execute(ctx context.Context, name string, args json.RawMessag
 	if !ok {
 		return "", fmt.Errorf("unknown tool: %s", name)
 	}
+	if !IsToolAllowed(name) {
+		return "", fmt.Errorf("tool %s is not permitted by runtime policy", name)
+	}
 	return tool.Execute(ctx, args)
 }
 

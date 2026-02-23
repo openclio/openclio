@@ -219,6 +219,36 @@ func TestRegistryExecute(t *testing.T) {
 	}
 }
 
+func TestRegistryExecuteHonorsAllowedToolsPolicy(t *testing.T) {
+	t.Setenv("OPENCLIO_ALLOWED_TOOLS", "read_file")
+
+	tmpDir := t.TempDir()
+	registry := NewRegistry(defaultToolsConfig(), tmpDir, "")
+
+	_, err := registry.Execute(context.Background(), "exec", json.RawMessage(`{"command":"echo blocked"}`))
+	if err == nil {
+		t.Fatal("expected exec to be blocked by OPENCLIO_ALLOWED_TOOLS")
+	}
+	if !strings.Contains(err.Error(), "not permitted by runtime policy") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestRegistryExecuteAllowsConfiguredTool(t *testing.T) {
+	t.Setenv("OPENCLIO_ALLOWED_TOOLS", "exec")
+
+	tmpDir := t.TempDir()
+	registry := NewRegistry(defaultToolsConfig(), tmpDir, "")
+
+	out, err := registry.Execute(context.Background(), "exec", json.RawMessage(`{"command":"echo allowed"}`))
+	if err != nil {
+		t.Fatalf("expected exec to be allowed, got error: %v", err)
+	}
+	if out != "allowed\n" {
+		t.Fatalf("unexpected output: %q", out)
+	}
+}
+
 func TestExecToolRecordsActionLog(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "tools-exec-log.db")
 	db, err := storage.Open(dbPath)
