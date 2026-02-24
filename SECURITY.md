@@ -195,7 +195,7 @@ Each adapter:
 
 ## Trust Scorecard: Your Agent vs OpenClaw
 
-| Area | OpenClaw | Your Agent |
+| Area | OpenClaw | OpenClio |
 |---|---|---|
 | Network exposure | ⚠️ Often misconfigured | ✅ Loopback default |
 | API key safety | ❌ Plain text in config | ✅ Env vars only |
