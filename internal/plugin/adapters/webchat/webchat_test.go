@@ -12,6 +12,26 @@ import (
 	"github.com/openclio/openclio/internal/plugin"
 )
 
+func TestHandler_NoCacheHeaders(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rec := httptest.NewRecorder()
+
+	Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+	if ct := rec.Header().Get("Content-Type"); !strings.Contains(ct, "text/html") {
+		t.Fatalf("expected text/html content type, got %q", ct)
+	}
+	if cc := rec.Header().Get("Cache-Control"); !strings.Contains(cc, "no-store") {
+		t.Fatalf("expected no-store cache control, got %q", cc)
+	}
+	if rec.Header().Get("Pragma") != "no-cache" {
+		t.Fatalf("expected pragma no-cache, got %q", rec.Header().Get("Pragma"))
+	}
+}
+
 func TestWebChatAdapter_Name(t *testing.T) {
 	a := NewAdapter()
 	if a.Name() != "webchat" {

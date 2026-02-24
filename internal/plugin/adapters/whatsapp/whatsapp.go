@@ -18,6 +18,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -47,7 +48,10 @@ type Adapter struct {
 	done     chan struct{}
 	qrMu     sync.RWMutex
 	qrState  plugin.QRCodeState
+	logState *whatsAppLogState
 }
+
+var nonDigitPattern = regexp.MustCompile(`[^0-9]+`)
 
 // New creates a new WhatsApp adapter.
 // dataDir: directory where the whatsapp.db session file is stored (e.g. ~/.openclio)
@@ -56,50 +60,69 @@ func New(dataDir string, logger *slog.Logger) (*Adapter, error) {
 		return nil, fmt.Errorf("whatsapp: create data dir: %w", err)
 	}
 
-	waLogger := newWhatsAppLogger(logger)
-
+	waLogger, waState := newWhatsAppLogger(logger)
 	dbFile := filepath.Join(dataDir, "whatsapp.db")
-	dsn := (&url.URL{
-		Scheme: "file",
-		Path:   filepath.ToSlash(dbFile),
-		RawQuery: url.Values{
-			"_pragma": []string{
-				"foreign_keys(1)",
-				"journal_mode(WAL)",
-				"busy_timeout(15000)",
-				"synchronous(NORMAL)",
-			},
-		}.Encode(),
-	}).String()
-	db, err := sql.Open("sqlite", dsn)
+	openClient := func() (*sql.DB, *whatsmeow.Client, error) {
+		dsn := (&url.URL{
+			Scheme: "file",
+			Path:   filepath.ToSlash(dbFile),
+			RawQuery: url.Values{
+				"_pragma": []string{
+					"foreign_keys(1)",
+					"journal_mode(WAL)",
+					"busy_timeout(15000)",
+					"synchronous(NORMAL)",
+				},
+			}.Encode(),
+		}).String()
+		db, err := sql.Open("sqlite", dsn)
+		if err != nil {
+			return nil, nil, fmt.Errorf("whatsapp: open sql db: %w", err)
+		}
+		// Keep a single SQLite connection for the WhatsApp session store. This avoids
+		// internal writer contention that shows up as frequent SQLITE_BUSY errors.
+		db.SetMaxOpenConns(1)
+		db.SetMaxIdleConns(1)
+
+		container := sqlstore.NewWithDB(db, "sqlite", waLogger)
+		if err := container.Upgrade(context.Background()); err != nil {
+			_ = db.Close()
+			return nil, nil, fmt.Errorf("whatsapp: open session store: %w", err)
+		}
+
+		deviceStore, err := container.GetFirstDevice(context.Background())
+		if err != nil {
+			_ = db.Close()
+			return nil, nil, fmt.Errorf("whatsapp: get device store: %w", err)
+		}
+
+		client := whatsmeow.NewClient(deviceStore, waLogger)
+		return db, client, nil
+	}
+
+	db, client, err := openClient()
 	if err != nil {
-		return nil, fmt.Errorf("whatsapp: open sql db: %w", err)
+		if shouldResetWhatsAppSessionStore(err) {
+			if logger != nil {
+				logger.Warn("whatsapp session store is unreadable; resetting local session and retrying", "error", err)
+			}
+			if resetErr := ResetStoredSession(dataDir); resetErr != nil {
+				return nil, fmt.Errorf("whatsapp: reset corrupted session store failed: %w", resetErr)
+			}
+			db, client, err = openClient()
+		}
 	}
-	// Keep a single SQLite connection for the WhatsApp session store. This avoids
-	// internal writer contention that shows up as frequent SQLITE_BUSY errors.
-	db.SetMaxOpenConns(1)
-	db.SetMaxIdleConns(1)
-
-	container := sqlstore.NewWithDB(db, "sqlite", waLogger)
-	if err := container.Upgrade(context.Background()); err != nil {
-		_ = db.Close()
-		return nil, fmt.Errorf("whatsapp: open session store: %w", err)
-	}
-
-	deviceStore, err := container.GetFirstDevice(context.Background())
 	if err != nil {
-		_ = db.Close()
-		return nil, fmt.Errorf("whatsapp: get device store: %w", err)
+		return nil, err
 	}
-
-	client := whatsmeow.NewClient(deviceStore, waLogger)
 
 	return &Adapter{
-		client:  client,
-		db:      db,
-		dataDir: dataDir,
-		logger:  logger,
-		done:    make(chan struct{}),
+		client:   client,
+		db:       db,
+		dataDir:  dataDir,
+		logger:   logger,
+		done:     make(chan struct{}),
+		logState: waState,
 	}, nil
 }
 
@@ -110,6 +133,11 @@ func (a *Adapter) Name() string { return "whatsapp" }
 func (a *Adapter) Health() error {
 	if a.client == nil {
 		return fmt.Errorf("whatsapp adapter: client not initialised")
+	}
+	state := a.QRCodeState()
+	switch strings.ToLower(strings.TrimSpace(state.Event)) {
+	case "waiting_for_qr", "code":
+		return nil
 	}
 	if !a.client.IsConnected() {
 		return fmt.Errorf("whatsapp adapter: client not connected")
@@ -244,15 +272,7 @@ func (a *Adapter) Start(ctx context.Context, inbound chan<- plugin.InboundMessag
 			case <-a.done:
 				return
 			case msg := <-outbound:
-				jid, err := types.ParseJID(msg.ChatID)
-				if err != nil {
-					a.logError("invalid chat JID", "chat_id", msg.ChatID, "error", err)
-					continue
-				}
-				_, err = a.client.SendMessage(ctx, jid, &waProto.Message{
-					Conversation: proto.String(msg.Text),
-				})
-				if err != nil {
+				if err := a.sendMessage(ctx, msg.ChatID, msg.Text); err != nil {
 					a.logError("send message failed", "error", err)
 				}
 			}
@@ -267,6 +287,12 @@ func (a *Adapter) Start(ctx context.Context, inbound chan<- plugin.InboundMessag
 
 	a.client.Disconnect()
 	return nil
+}
+
+// SendDirect sends a WhatsApp text message synchronously and returns delivery
+// acceptance errors directly to the caller.
+func (a *Adapter) SendDirect(ctx context.Context, chatID, text string) error {
+	return a.sendMessage(ctx, chatID, text)
 }
 
 // QRCodeState returns the latest WhatsApp QR pairing state for web clients.
@@ -284,6 +310,116 @@ func (a *Adapter) setQRState(event, code string) {
 		Code:      code,
 		UpdatedAt: time.Now().UTC(),
 	}
+}
+
+func (a *Adapter) sendMessage(ctx context.Context, rawChatID, text string) error {
+	if strings.TrimSpace(text) == "" {
+		return fmt.Errorf("message text is required")
+	}
+	if a.client == nil {
+		return fmt.Errorf("whatsapp client is not initialized")
+	}
+	if !a.client.IsConnected() {
+		return fmt.Errorf("whatsapp is not connected")
+	}
+	jid, err := normalizeWhatsAppChatID(rawChatID)
+	if err != nil {
+		return err
+	}
+	var lastErr error
+	for attempt := 0; attempt < 3; attempt++ {
+		msgID := a.client.GenerateMessageID()
+		_, err := a.client.SendMessage(
+			ctx,
+			jid,
+			&waProto.Message{Conversation: proto.String(text)},
+			whatsmeow.SendRequestExtra{ID: msgID},
+		)
+		failCount, failLine := a.logState.consumeEncryptionFailure(string(msgID))
+		if err == nil && failCount == 0 {
+			return nil
+		}
+		if err == nil && failCount > 0 {
+			err = fmt.Errorf("message encryption failed for %d recipient device(s): %s", failCount, failLine)
+		}
+		if err != nil {
+			lastErr = err
+		}
+		if ctx.Err() != nil {
+			return fmt.Errorf("whatsapp send failed: %w", ctx.Err())
+		}
+		if attempt < 2 && shouldRetryWhatsAppDelivery(lastErr) {
+			time.Sleep(400 * time.Millisecond)
+			continue
+		}
+		break
+	}
+	if lastErr != nil {
+		return fmt.Errorf("whatsapp send failed: %w", lastErr)
+	}
+	return fmt.Errorf("whatsapp send failed")
+}
+
+func shouldRetryWhatsAppDelivery(err error) bool {
+	if err == nil {
+		return false
+	}
+	lower := strings.ToLower(err.Error())
+	return strings.Contains(lower, "no signal session established") ||
+		strings.Contains(lower, "not connected") ||
+		strings.Contains(lower, "timed out")
+}
+
+func shouldResetWhatsAppSessionStore(err error) bool {
+	if err == nil {
+		return false
+	}
+	lower := strings.ToLower(err.Error())
+	return strings.Contains(lower, "failed to check if foreign keys are enabled") ||
+		(strings.Contains(lower, "sql logic error") && strings.Contains(lower, "out of memory"))
+}
+
+func normalizeWhatsAppChatID(raw string) (types.JID, error) {
+	chatID := strings.TrimSpace(raw)
+	if chatID == "" {
+		return types.JID{}, fmt.Errorf("chat_id is required")
+	}
+
+	// Accept legacy c.us and map to whatsmeow's s.whatsapp.net user server.
+	chatID = strings.ReplaceAll(chatID, "@c.us", "@s.whatsapp.net")
+
+	if strings.Contains(chatID, "@") {
+		jid, err := types.ParseJID(chatID)
+		if err != nil {
+			return types.JID{}, fmt.Errorf("invalid whatsapp chat_id %q: %w", raw, err)
+		}
+		if jid.Server == "" {
+			return types.JID{}, fmt.Errorf("invalid whatsapp chat_id %q: missing server", raw)
+		}
+		return jid, nil
+	}
+
+	digits := nonDigitPattern.ReplaceAllString(chatID, "")
+	if strings.HasPrefix(chatID, "+") {
+		chatID = strings.TrimPrefix(chatID, "+")
+		digits = nonDigitPattern.ReplaceAllString(chatID, "")
+	}
+	if strings.HasPrefix(digits, "00") {
+		digits = strings.TrimPrefix(digits, "00")
+	}
+	if digits == "" {
+		return types.JID{}, fmt.Errorf("invalid whatsapp phone number %q", raw)
+	}
+	// E.164 with country code is required when using phone numbers directly.
+	if len(digits) < 11 {
+		return types.JID{}, fmt.Errorf("whatsapp number %q is missing country code; use E.164 (example: 919500080653) or full JID (example: 919500080653@s.whatsapp.net)", raw)
+	}
+
+	jid, err := types.ParseJID(digits + "@s.whatsapp.net")
+	if err != nil {
+		return types.JID{}, fmt.Errorf("invalid whatsapp number %q: %w", raw, err)
+	}
+	return jid, nil
 }
 
 func (a *Adapter) primeAppStateSync(ctx context.Context) {

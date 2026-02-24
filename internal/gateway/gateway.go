@@ -334,6 +334,14 @@ func (s *Server) AttachToolRegistry(registry *tools.Registry) {
 	s.handlers.AttachToolRegistry(registry)
 }
 
+// AttachChannelRuntime wires runtime channel lifecycle controls.
+func (s *Server) AttachChannelRuntime(connector tools.ChannelConnector, lifecycle tools.ChannelLifecycleController) {
+	if s == nil || s.handlers == nil {
+		return
+	}
+	s.handlers.AttachChannelRuntime(connector, lifecycle)
+}
+
 // AttachMCPStatusSource wires MCP runtime status/restart source.
 func (s *Server) AttachMCPStatusSource(source MCPRuntimeStatusSource) {
 	if s == nil || s.handlers == nil {

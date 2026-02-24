@@ -40,6 +40,8 @@ type Handlers struct {
 	knowledgeGraph *storage.KnowledgeGraphStore
 	agentProfiles  *storage.AgentProfileStore
 	toolRegistry   *tools.Registry
+	channelControl tools.ChannelConnector
+	channelLife    tools.ChannelLifecycleController
 	mcpStatus      MCPRuntimeStatusSource
 	mcpServers     []config.MCPServerConfig
 	startedAt      time.Time
@@ -130,12 +132,7 @@ func (h *Handlers) AttachRuntimeSources(manager *plugin.Manager, scheduler *agen
 	h.scheduler = scheduler
 	h.allowlist = allowlist
 	h.mcpServers = append([]config.MCPServerConfig(nil), mcpServers...)
-	// Register runtime message_send tool when manager becomes available.
-	if h.toolRegistry != nil && manager != nil {
-		// Replace existing message_send tool if present.
-		h.toolRegistry.Unregister("message_send")
-		h.toolRegistry.Register(tools.NewMessageSendTool(manager))
-	}
+	h.registerRuntimeMessageSendTool()
 }
 
 // AttachPrivacyStore wires optional privacy redaction storage.
@@ -161,6 +158,27 @@ func (h *Handlers) AttachAgentProfiles(store *storage.AgentProfileStore) {
 // AttachToolRegistry wires optional runtime tool registry used for live tool updates.
 func (h *Handlers) AttachToolRegistry(registry *tools.Registry) {
 	h.toolRegistry = registry
+}
+
+// AttachChannelRuntime wires runtime channel connect/disconnect controls.
+func (h *Handlers) AttachChannelRuntime(connector tools.ChannelConnector, lifecycle tools.ChannelLifecycleController) {
+	h.channelControl = connector
+	h.channelLife = lifecycle
+	h.registerRuntimeMessageSendTool()
+}
+
+func (h *Handlers) registerRuntimeMessageSendTool() {
+	// Register runtime message_send tool when manager becomes available.
+	if h.toolRegistry == nil || h.manager == nil {
+		return
+	}
+	// Replace existing message_send tool if present.
+	h.toolRegistry.Unregister("message_send")
+	msgTool := tools.NewMessageSendTool(h.manager)
+	if h.channelControl != nil {
+		msgTool.SetChannelConnector(h.channelControl)
+	}
+	h.toolRegistry.Register(msgTool)
 }
 
 // AttachMCPStatusSource wires MCP runtime health/restart source for dashboard APIs.

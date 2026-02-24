@@ -27,6 +27,25 @@ type mockQRAdapter struct {
 	state plugin.QRCodeState
 }
 
+type mockChannelRuntime struct {
+	connectFn    func(channelType string, credentials map[string]string) error
+	disconnectFn func(channelType string) error
+}
+
+func (m *mockChannelRuntime) ConnectChannel(channelType string, credentials map[string]string) error {
+	if m.connectFn != nil {
+		return m.connectFn(channelType, credentials)
+	}
+	return nil
+}
+
+func (m *mockChannelRuntime) DisconnectChannel(channelType string) error {
+	if m.disconnectFn != nil {
+		return m.disconnectFn(channelType)
+	}
+	return nil
+}
+
 func (m *mockQRAdapter) Name() string { return "whatsapp" }
 
 func (m *mockQRAdapter) Start(_ context.Context, _ chan<- plugin.InboundMessage, _ <-chan plugin.OutboundMessage) error {
@@ -189,6 +208,78 @@ func TestChannelWhatsAppQREndpoint(t *testing.T) {
 	}
 	if !strings.Contains(rec.Body.String(), `"qr_image":"data:image/png;base64,`) {
 		t.Fatalf("expected qr image data url in response, got %s", rec.Body.String())
+	}
+}
+
+func TestChannelAction_ConnectUsesRuntimeConnector(t *testing.T) {
+	h := setupTestHandlers(t)
+	mgr := plugin.NewManager(nil)
+	h.AttachRuntimeSources(mgr, nil, nil, nil)
+
+	var gotChannel string
+	gotCreds := map[string]string{}
+	runtime := &mockChannelRuntime{
+		connectFn: func(channelType string, credentials map[string]string) error {
+			gotChannel = channelType
+			for k, v := range credentials {
+				gotCreds[k] = v
+			}
+			return nil
+		},
+	}
+	h.AttachChannelRuntime(runtime, runtime)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/channels/action", strings.NewReader(`{"name":"whatsapp","action":"connect","force_reconnect":true}`))
+	rec := httptest.NewRecorder()
+	h.ChannelAction(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	if gotChannel != "whatsapp" {
+		t.Fatalf("expected whatsapp channel, got %q", gotChannel)
+	}
+	if gotCreds["force_reconnect"] != "true" {
+		t.Fatalf("expected force_reconnect credential, got %#v", gotCreds)
+	}
+}
+
+func TestChannelAction_DisconnectUsesRuntimeLifecycle(t *testing.T) {
+	h := setupTestHandlers(t)
+	mgr := plugin.NewManager(nil)
+	h.AttachRuntimeSources(mgr, nil, nil, nil)
+
+	var disconnected string
+	runtime := &mockChannelRuntime{
+		disconnectFn: func(channelType string) error {
+			disconnected = channelType
+			return nil
+		},
+	}
+	h.AttachChannelRuntime(runtime, runtime)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/channels/action", strings.NewReader(`{"name":"whatsapp","action":"disconnect"}`))
+	rec := httptest.NewRecorder()
+	h.ChannelAction(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	if disconnected != "whatsapp" {
+		t.Fatalf("expected whatsapp disconnect, got %q", disconnected)
+	}
+}
+
+func TestChannelAction_RequiresRuntimeConnectorForConnect(t *testing.T) {
+	h := setupTestHandlers(t)
+	h.AttachRuntimeSources(plugin.NewManager(nil), nil, nil, nil)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/channels/action", strings.NewReader(`{"name":"whatsapp","action":"connect"}`))
+	rec := httptest.NewRecorder()
+	h.ChannelAction(rec, req)
+
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503, got %d body=%s", rec.Code, rec.Body.String())
 	}
 }
 
@@ -1059,6 +1150,12 @@ func TestNodesIncludesMCPRuntimeStatus(t *testing.T) {
 	}
 	if !strings.Contains(rec.Body.String(), `"restart_count":2`) {
 		t.Fatalf("expected restart_count in nodes response, got %s", rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), `"catalog_total":`) {
+		t.Fatalf("expected catalog_total in nodes response, got %s", rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), `"built_in_tools"`) {
+		t.Fatalf("expected built_in_tools in nodes response, got %s", rec.Body.String())
 	}
 }
 

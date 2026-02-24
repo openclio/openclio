@@ -12,6 +12,13 @@ import (
 type whatsAppLogState struct {
 	benignSocketCloseOnce sync.Once
 	appStateKeyOnce       sync.Once
+	mu                    sync.Mutex
+	encryptFailures       map[string]encryptFailure
+}
+
+type encryptFailure struct {
+	count int
+	last  string
 }
 
 type whatsAppLogger struct {
@@ -20,15 +27,18 @@ type whatsAppLogger struct {
 	state  *whatsAppLogState
 }
 
-func newWhatsAppLogger(base *slog.Logger) waLog.Logger {
+func newWhatsAppLogger(base *slog.Logger) (waLog.Logger, *whatsAppLogState) {
+	state := &whatsAppLogState{
+		encryptFailures: make(map[string]encryptFailure),
+	}
 	if base == nil {
-		return waLog.Stdout("openclio/whatsapp", "WARN", true)
+		return waLog.Stdout("openclio/whatsapp", "WARN", true), state
 	}
 	return &whatsAppLogger{
 		base:   base,
 		module: "openclio/whatsapp",
-		state:  &whatsAppLogState{},
-	}
+		state:  state,
+	}, state
 }
 
 func (l *whatsAppLogger) Warnf(msg string, args ...interface{}) {
@@ -84,6 +94,10 @@ func (l *whatsAppLogger) output(level slog.Level, msg string, args ...interface{
 		return
 	}
 
+	if strings.HasPrefix(formatted, "Failed to encrypt ") {
+		l.state.recordEncryptionFailure(formatted)
+	}
+
 	switch level {
 	case slog.LevelDebug:
 		l.base.Debug(formatted, "component", l.module)
@@ -94,4 +108,39 @@ func (l *whatsAppLogger) output(level slog.Level, msg string, args ...interface{
 	default:
 		l.base.Error(formatted, "component", l.module)
 	}
+}
+
+func (s *whatsAppLogState) recordEncryptionFailure(line string) {
+	if s == nil {
+		return
+	}
+	rest := strings.TrimPrefix(line, "Failed to encrypt ")
+	fields := strings.Fields(rest)
+	if len(fields) == 0 {
+		return
+	}
+	id := strings.TrimSpace(fields[0])
+	if id == "" {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	cur := s.encryptFailures[id]
+	cur.count++
+	cur.last = line
+	s.encryptFailures[id] = cur
+}
+
+func (s *whatsAppLogState) consumeEncryptionFailure(id string) (count int, last string) {
+	if s == nil || strings.TrimSpace(id) == "" {
+		return 0, ""
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	cur, ok := s.encryptFailures[id]
+	if !ok {
+		return 0, ""
+	}
+	delete(s.encryptFailures, id)
+	return cur.count, cur.last
 }

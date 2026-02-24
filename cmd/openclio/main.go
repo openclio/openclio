@@ -1359,14 +1359,49 @@ func runServe(
 		channelConnector.SetHandler(func(channelType string, credentials map[string]string) error {
 			channelType = strings.ToLower(strings.TrimSpace(channelType))
 			forceReconnect, _ := strconv.ParseBool(strings.TrimSpace(credentials["force_reconnect"]))
+			existing := manager.AdapterByName(channelType)
+			if existing != nil {
+				statusRunning := false
+				for _, st := range manager.Statuses() {
+					if st.Name == channelType {
+						statusRunning = st.Running
+						break
+					}
+				}
 
-			if manager.AdapterByName(channelType) != nil {
-				if channelType == "whatsapp" && forceReconnect {
-					if err := disconnectRuntimeChannel(channelType, true); err != nil {
-						return err
+				if channelType == "whatsapp" {
+					if forceReconnect {
+						if err := disconnectRuntimeChannel(channelType, true); err != nil {
+							return err
+						}
+					} else {
+						qrProvider, ok := existing.(interface {
+							QRCodeState() plugin.QRCodeState
+						})
+						if ok {
+							qrState := qrProvider.QRCodeState()
+							event := strings.ToLower(strings.TrimSpace(qrState.Event))
+							if event == "connected" || event == "success" {
+								return fmt.Errorf("%s channel is already connected", channelType)
+							}
+							if event == "waiting_for_qr" || event == "code" {
+								return fmt.Errorf("%s pairing is already in progress", channelType)
+							}
+						}
+						if statusRunning {
+							return fmt.Errorf("%s channel is already connected", channelType)
+						}
+						if err := disconnectRuntimeChannel(channelType, false); err != nil {
+							return err
+						}
 					}
 				} else {
-					return fmt.Errorf("%s channel is already connected", channelType)
+					if statusRunning {
+						return fmt.Errorf("%s channel is already connected", channelType)
+					}
+					if err := disconnectRuntimeChannel(channelType, false); err != nil {
+						return err
+					}
 				}
 			}
 
@@ -1374,6 +1409,9 @@ func runServe(
 			switch channelType {
 			case "slack":
 				token := strings.TrimSpace(credentials["token"])
+				if token == "" && cfg.Channels.Slack != nil && strings.TrimSpace(cfg.Channels.Slack.TokenEnv) != "" {
+					token = strings.TrimSpace(os.Getenv(cfg.Channels.Slack.TokenEnv))
+				}
 				if token == "" {
 					return fmt.Errorf("slack token is required")
 				}
@@ -1385,6 +1423,9 @@ func runServe(
 			case "telegram":
 				token := strings.TrimSpace(credentials["token"])
 				if token == "" {
+					token = strings.TrimSpace(os.Getenv("TELEGRAM_BOT_TOKEN"))
+				}
+				if token == "" {
 					return fmt.Errorf("telegram token is required")
 				}
 				tg, err := telegramadapter.New(token, internlog.AsLogger(log))
@@ -1394,6 +1435,9 @@ func runServe(
 				adapter = tg
 			case "discord":
 				token := strings.TrimSpace(credentials["token"])
+				if token == "" {
+					token = strings.TrimSpace(os.Getenv("DISCORD_BOT_TOKEN"))
+				}
 				if token == "" {
 					return fmt.Errorf("discord token is required")
 				}
@@ -1414,6 +1458,7 @@ func runServe(
 						waDataDir = cfg.Channels.WhatsApp.DataDir
 					}
 				}
+				waDataDir = resolveLocalPath(waDataDir)
 				if forceReconnect {
 					if err := whatsappadapter.ResetStoredSession(waDataDir); err != nil {
 						return fmt.Errorf("resetting whatsapp stored session failed: %w", err)
@@ -1471,6 +1516,7 @@ func runServe(
 		if cfg.Channels.WhatsApp.DataDir != "" {
 			waDataDir = cfg.Channels.WhatsApp.DataDir
 		}
+		waDataDir = resolveLocalPath(waDataDir)
 		wa, err := whatsappadapter.New(waDataDir, internlog.AsLogger(log))
 		if err != nil {
 			log.Warn("whatsapp adapter failed to initialise", "error", err)
@@ -1529,6 +1575,7 @@ func runServe(
 	server.AttachToolRegistry(toolRegistry)
 	server.AttachMCPStatusSource(mcpHealth)
 	server.AttachRuntimeSources(manager, scheduler, allowlist, cfg.MCPServers)
+	server.AttachChannelRuntime(channelConnector, channelConnector)
 
 	// gRPC out-of-process adapter server (opt-in via gateway.grpc_port)
 	var grpcCore *rpc.CoreServer
@@ -1626,6 +1673,25 @@ func resolveChannelStatus(manager *plugin.Manager, st plugin.AdapterStatus) tool
 	}
 
 	return status
+}
+
+func resolveLocalPath(path string) string {
+	p := strings.TrimSpace(path)
+	if p == "" {
+		return ""
+	}
+	if p == "~" {
+		if home, err := os.UserHomeDir(); err == nil {
+			return home
+		}
+		return p
+	}
+	if strings.HasPrefix(p, "~/") {
+		if home, err := os.UserHomeDir(); err == nil {
+			return filepath.Join(home, strings.TrimPrefix(p, "~/"))
+		}
+	}
+	return p
 }
 
 func startIncrementalVacuumLoop(ctx context.Context, db *storage.DB, log *internlog.Logger) {

@@ -10,6 +10,9 @@
 <script src="https://cdn.jsdelivr.net/npm/dompurify/dist/purify.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   :root {
@@ -1007,12 +1010,22 @@
     word-break: break-word;
     font-size: 11px;
     line-height: 1.35;
-    background: #0b0f19;
-    border: 1px solid var(--border);
+    color: var(--text);
+    background: var(--tool-bg);
+    background: color-mix(in oklab, var(--tool-bg) 90%, var(--surface));
+    border: 1px solid color-mix(in oklab, var(--border) 85%, var(--surface2));
     padding: 10px;
     border-radius: 8px;
     max-height: 40vh;
     overflow: auto;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  }
+
+  body.theme-light .action-output {
+    color: #1b2e27;
+    background: #f2f7f4;
+    border-color: #c9d7cf;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75);
   }
 
   .tab-error {
@@ -1390,6 +1403,627 @@
   ::-webkit-scrollbar { width: 8px; height: 8px; }
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb { background: #2f3448; border-radius: 4px; }
+
+  /* UI refresh overrides */
+  :root {
+    --bg: #0e1915;
+    --surface: #13231d;
+    --surface2: #1a3028;
+    --border: #29453a;
+    --text: #e8f2ed;
+    --dim: #99b2a8;
+    --accent: #22b497;
+    --accent-dim: #198f79;
+    --accent-rgb: 34, 180, 151;
+    --green: #22c55e;
+    --red: #ef4444;
+    --yellow: #f59e0b;
+    --tool-bg: #102019;
+    --code-bg: #0f1f18;
+    --sidebar-w: 260px;
+    --header-h: 60px;
+    --radius-sm: 9px;
+    --radius-md: 14px;
+    --radius-lg: 20px;
+    --shadow: 0 18px 42px rgba(4, 8, 7, 0.34);
+    --transition: 0.22s ease;
+  }
+
+  body.theme-light {
+    --bg: #eef5ee;
+    --surface: #ffffff;
+    --surface2: #edf4ef;
+    --border: #cddcd1;
+    --text: #16261f;
+    --dim: #5f736a;
+    --accent: #0f8a78;
+    --accent-dim: #0b6f61;
+    --accent-rgb: 15, 138, 120;
+    --tool-bg: #f5faf6;
+    --code-bg: #edf3ef;
+    --shadow: 0 18px 36px rgba(27, 53, 40, 0.1);
+  }
+
+  body {
+    font-family: "Space Grotesk", "Avenir Next", "Trebuchet MS", sans-serif;
+    background: var(--bg);
+    position: relative;
+  }
+
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background:
+      radial-gradient(60% 70% at 8% 0%, rgba(var(--accent-rgb), 0.24), transparent 68%),
+      radial-gradient(46% 58% at 100% 8%, rgba(247, 144, 78, 0.12), transparent 72%),
+      linear-gradient(180deg, rgba(0, 0, 0, 0.16), transparent 34%);
+  }
+
+  body.theme-light::before {
+    background:
+      radial-gradient(54% 62% at 0% 0%, rgba(var(--accent-rgb), 0.15), transparent 70%),
+      radial-gradient(40% 50% at 100% 0%, rgba(217, 119, 6, 0.1), transparent 75%),
+      linear-gradient(180deg, rgba(255, 255, 255, 0.72), transparent 38%);
+  }
+
+  #topbar {
+    padding: 0 18px;
+    background: color-mix(in oklab, var(--surface) 90%, transparent);
+    backdrop-filter: blur(9px);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
+    animation: topbarIn 0.26s ease;
+  }
+
+  .logo {
+    font-size: 15px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  #sidebar-toggle, #settings-btn, #refresh-btn {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+  }
+
+  #sidebar-toggle:hover, #settings-btn:hover, #refresh-btn:hover {
+    background: rgba(var(--accent-rgb), 0.14);
+  }
+
+  #mode-tabs {
+    background: rgba(var(--accent-rgb), 0.08);
+    border-radius: 999px;
+  }
+
+  .mode-tab {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  #layout {
+    gap: 12px;
+    padding: 12px;
+    height: calc(100vh - var(--header-h));
+  }
+
+  #sidebar {
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    background: linear-gradient(180deg, color-mix(in oklab, var(--surface) 94%, transparent), color-mix(in oklab, var(--surface2) 92%, transparent));
+    box-shadow: var(--shadow);
+  }
+
+  #new-chat-btn {
+    margin: 14px;
+    padding: 11px 13px;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    border-radius: 10px;
+    text-align: center;
+  }
+
+  .session-group-label {
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    font-weight: 600;
+  }
+
+  .session-item {
+    margin: 2px 8px;
+    padding: 9px 12px;
+    border-radius: 10px;
+    border: 1px solid transparent;
+  }
+
+  .session-item:hover {
+    border-color: rgba(var(--accent-rgb), 0.26);
+    background: rgba(var(--accent-rgb), 0.09);
+  }
+
+  .session-item.active {
+    background: rgba(var(--accent-rgb), 0.17);
+    border-color: rgba(var(--accent-rgb), 0.35);
+  }
+
+  #chat-area {
+    border: 1px solid var(--border);
+    border-radius: 22px;
+    background: color-mix(in oklab, var(--surface) 96%, transparent);
+    box-shadow: var(--shadow);
+    min-width: 0;
+  }
+
+  #messages {
+    padding: 28px clamp(16px, 3vw, 42px);
+    gap: 14px;
+  }
+
+  .msg {
+    max-width: min(860px, 100%);
+  }
+
+  .msg.user {
+    max-width: min(760px, 92%);
+  }
+
+  .msg-avatar {
+    border: 1px solid var(--border);
+    background: color-mix(in oklab, var(--surface2) 88%, transparent);
+  }
+
+  .msg.user .msg-avatar {
+    background: color-mix(in oklab, var(--accent) 80%, #0f172a);
+    border-color: transparent;
+  }
+
+  .msg-bubble {
+    padding: 13px 16px;
+    font-size: 14px;
+    line-height: 1.72;
+  }
+
+  .msg.user .msg-bubble {
+    background: linear-gradient(140deg, var(--accent), var(--accent-dim));
+    border: none;
+  }
+
+  .msg.assistant .msg-bubble,
+  .msg.system .msg-bubble {
+    background: color-mix(in oklab, var(--surface) 96%, transparent);
+    border-radius: 6px var(--radius-lg) var(--radius-lg) var(--radius-lg);
+  }
+
+  .tool-card {
+    border-radius: 10px;
+  }
+
+  #footer-bar {
+    border-top: none;
+    background: transparent;
+    padding: 10px 16px 16px;
+  }
+
+  #token-counter {
+    padding: 0 6px;
+    font-weight: 500;
+  }
+
+  #input-row {
+    background: color-mix(in oklab, var(--surface) 95%, transparent);
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    padding: 8px;
+    gap: 8px;
+    transition: border-color var(--transition), box-shadow var(--transition);
+  }
+
+  #input-row:focus-within {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.16);
+  }
+
+  #input {
+    background: transparent;
+    border: none;
+    min-height: 42px;
+    padding: 10px 12px;
+  }
+
+  #input:focus {
+    border-color: transparent;
+  }
+
+  #send,
+  #stop-run {
+    border-radius: 12px;
+    width: 42px;
+    height: 42px;
+  }
+
+  #settings-drawer {
+    background: var(--bg);
+    border-left: none;
+  }
+
+  #drawer-header {
+    background: color-mix(in oklab, var(--surface) 94%, transparent);
+    backdrop-filter: blur(7px);
+    padding: 14px 18px;
+  }
+
+  #drawer-header span {
+    font-size: 14px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  #drawer-body {
+    gap: 12px;
+    padding: 12px;
+  }
+
+  #settings-nav {
+    width: 200px;
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    background: color-mix(in oklab, var(--surface) 94%, transparent);
+    padding: 10px 8px;
+  }
+
+  .nav-group-label {
+    font-size: 10px;
+    letter-spacing: 0.13em;
+    text-transform: uppercase;
+    color: var(--dim);
+    padding: 10px 10px 6px;
+    font-weight: 600;
+  }
+
+  .nav-item {
+    margin: 2px 0;
+    border-radius: 10px;
+    padding: 10px 12px;
+    font-weight: 500;
+  }
+
+  .nav-item .nav-icon {
+    font-family: "IBM Plex Mono", "SFMono-Regular", Menlo, Consolas, monospace;
+    font-size: 10px;
+    letter-spacing: 0.04em;
+    color: color-mix(in oklab, var(--dim) 82%, var(--text));
+    width: 18px;
+    text-transform: uppercase;
+  }
+
+  .nav-item:hover {
+    background: rgba(var(--accent-rgb), 0.11);
+  }
+
+  .nav-item.active {
+    color: var(--text);
+    background: rgba(var(--accent-rgb), 0.2);
+  }
+
+  .nav-item.active .nav-icon {
+    color: var(--text);
+  }
+
+  #settings-panel {
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    background: color-mix(in oklab, var(--surface) 97%, transparent);
+    padding: 22px;
+    box-shadow: var(--shadow);
+  }
+
+  .panel-warning {
+    background: rgba(245, 158, 11, 0.12);
+    border-color: rgba(245, 158, 11, 0.36);
+    color: color-mix(in oklab, var(--yellow) 78%, var(--text));
+    border-radius: 10px;
+    font-size: 12px;
+  }
+
+  .setting-section-title {
+    margin-top: 22px;
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    font-weight: 700;
+  }
+
+  .setting-label {
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+  }
+
+  .setting-input,
+  .setting-select,
+  .setting-range {
+    border-radius: 10px;
+    padding: 9px 11px;
+  }
+
+  .setting-input:focus,
+  .setting-select:focus,
+  .setting-range:focus {
+    box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.14);
+  }
+
+  .setting-save-btn,
+  .setup-save-btn {
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    border-radius: 10px;
+  }
+
+  .action-btn-secondary,
+  .action-btn-danger {
+    border-radius: 10px;
+  }
+
+  .tab-error {
+    border-radius: 10px;
+    font-size: 12px;
+  }
+
+  .table-wrap {
+    margin-top: 10px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: auto;
+    background: color-mix(in oklab, var(--surface) 95%, transparent);
+  }
+
+  .log-table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 560px;
+    font-size: 12px;
+  }
+
+  .log-table thead th {
+    text-align: left;
+    font-weight: 600;
+    color: var(--dim);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    font-size: 10px;
+    padding: 10px 11px;
+    border-bottom: 1px solid var(--border);
+    background: color-mix(in oklab, var(--surface2) 88%, transparent);
+    position: sticky;
+    top: 0;
+    z-index: 1;
+  }
+
+  .log-table tbody td {
+    padding: 10px 11px;
+    border-bottom: 1px solid color-mix(in oklab, var(--border) 80%, transparent);
+    vertical-align: top;
+  }
+
+  .log-table tbody tr:hover {
+    background: rgba(var(--accent-rgb), 0.06);
+  }
+
+  .inline-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 8px;
+  }
+
+  .control-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 10px;
+  }
+
+  .kpi-item {
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 12px;
+    background: color-mix(in oklab, var(--surface) 96%, transparent);
+  }
+
+  .kpi-label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.09em;
+    color: var(--dim);
+    margin-bottom: 6px;
+  }
+
+  .kpi-value {
+    font-size: 20px;
+    line-height: 1.1;
+    font-weight: 700;
+    color: var(--text);
+  }
+
+  .control-grid {
+    display: grid;
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  .control-card {
+    grid-column: span 4;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 12px;
+    background: color-mix(in oklab, var(--surface) 97%, transparent);
+    min-width: 0;
+  }
+
+  .control-card.wide {
+    grid-column: span 12;
+  }
+
+  .control-card-title {
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--dim);
+    font-weight: 700;
+    margin-bottom: 8px;
+  }
+
+  .control-card-subtitle {
+    margin-top: -2px;
+    margin-bottom: 8px;
+    font-size: 11px;
+    color: var(--dim);
+    line-height: 1.5;
+  }
+
+  .setup-progress {
+    width: 100%;
+    height: 6px;
+    border-radius: 999px;
+    background: color-mix(in oklab, var(--border) 80%, transparent);
+    overflow: hidden;
+    margin: 2px 0 10px;
+  }
+
+  .setup-progress-fill {
+    height: 100%;
+    width: 25%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, var(--accent), color-mix(in oklab, var(--accent-dim) 75%, #ffffff));
+    transition: width var(--transition);
+  }
+
+  .setup-step-title {
+    font-size: 12px;
+    color: var(--text);
+    margin-bottom: 12px;
+    line-height: 1.55;
+  }
+
+  button:focus-visible,
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible,
+  [tabindex]:focus-visible {
+    outline: 2px solid color-mix(in oklab, var(--accent) 88%, #ffffff);
+    outline-offset: 2px;
+  }
+
+  .setup-card,
+  .confirm-card,
+  .wa-qr-card {
+    border-radius: 16px;
+    box-shadow: var(--shadow);
+  }
+
+  .setup-card,
+  .confirm-card,
+  .wa-qr-card,
+  body.theme-light .setup-card,
+  body.theme-light .confirm-card,
+  body.theme-light .wa-qr-card {
+    background: color-mix(in oklab, var(--surface) 97%, transparent);
+  }
+
+  #toast {
+    border-radius: 10px;
+    background: color-mix(in oklab, var(--surface) 95%, #000);
+  }
+
+  #messages > .msg,
+  #messages > .tool-card,
+  #messages > .empty-state {
+    animation: riseIn 0.18s ease both;
+  }
+
+  @media (max-width: 768px) {
+    #layout {
+      padding: 0;
+      gap: 0;
+    }
+
+    #chat-area {
+      border-radius: 0;
+      border-left: none;
+      border-right: none;
+      border-bottom: none;
+      box-shadow: none;
+    }
+
+    #sidebar {
+      border-radius: 0 16px 16px 0;
+      border-left: none;
+      box-shadow: 0 16px 34px rgba(0, 0, 0, 0.24);
+    }
+
+    #drawer-body {
+      padding: 8px 8px 74px;
+      gap: 8px;
+    }
+
+    #settings-panel {
+      border-radius: 14px;
+      padding: 14px;
+      box-shadow: none;
+    }
+
+    body.dashboard-open #settings-nav .nav-group-label {
+      display: none;
+    }
+
+    body.dashboard-open #settings-nav .nav-item.active {
+      border-color: rgba(var(--accent-rgb), 0.42);
+    }
+
+    body.dashboard-open #settings-nav .nav-item .nav-icon {
+      font-size: 10px;
+      width: auto;
+      letter-spacing: 0.03em;
+    }
+
+    .control-card {
+      grid-column: span 12 !important;
+    }
+
+    .kpi-value {
+      font-size: 18px;
+    }
+  }
+
+  @keyframes topbarIn {
+    from { opacity: 0; transform: translateY(-6px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes riseIn {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.001ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.001ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
 </style>
 </head>
 <body>
@@ -1399,7 +2033,7 @@
     <span class="logo">openclio</span>
     <div id="mode-tabs" aria-label="Mode switch">
       <button id="mode-chat-btn" class="mode-tab active" type="button">Chat</button>
-      <button id="mode-dashboard-btn" class="mode-tab" type="button">Dashboard</button>
+      <button id="mode-dashboard-btn" class="mode-tab" type="button">Control</button>
     </div>
     <div class="header-right">
       <span id="model-badge">loading...</span>
@@ -1430,16 +2064,18 @@
   </div>
 </div>
 
-<div id="setup-overlay">
+<div id="setup-overlay" aria-hidden="true" role="dialog" aria-modal="true" aria-label="Initial setup">
   <div class="setup-card">
     <div class="setup-title">Welcome to openclio</div>
-    <div class="setup-subtitle">Complete these 4 steps to start chatting.</div>
+    <div class="setup-subtitle">Complete setup once, then start chatting with tool access and memory.</div>
     <div class="setup-stepper">
       <div class="setup-step active" data-setup-step-ind="1">1. Provider</div>
-      <div class="setup-step" data-setup-step-ind="2">2. API Key</div>
+      <div class="setup-step" data-setup-step-ind="2">2. Credentials</div>
       <div class="setup-step" data-setup-step-ind="3">3. Model</div>
-      <div class="setup-step" data-setup-step-ind="4">4. Done</div>
+      <div class="setup-step" data-setup-step-ind="4">4. Review</div>
     </div>
+    <div class="setup-progress"><div id="setup-progress-fill" class="setup-progress-fill"></div></div>
+    <div id="setup-step-title" class="setup-step-title">Step 1: choose your provider.</div>
     <div id="setup-error" class="setup-error"></div>
     <div id="setup-step-1" class="setup-pane active">
       <div class="setting-row">
@@ -1500,7 +2136,7 @@
   </div>
 </div>
 
-<div id="confirm-overlay">
+<div id="confirm-overlay" aria-hidden="true" role="dialog" aria-modal="true" aria-label="Confirmation dialog">
   <div class="confirm-card">
     <div id="confirm-title" class="confirm-title">Confirm action</div>
     <div id="confirm-message" class="confirm-message"></div>
@@ -1511,7 +2147,7 @@
   </div>
 </div>
 
-<div id="wa-qr-overlay">
+<div id="wa-qr-overlay" aria-hidden="true" role="dialog" aria-modal="true" aria-label="WhatsApp QR link dialog">
   <div class="wa-qr-card">
     <div class="wa-qr-title">openclio WhatsApp Link</div>
     <div id="wa-qr-status" class="wa-qr-subtitle">Waiting for WhatsApp QR code...</div>
@@ -1525,27 +2161,28 @@
 
 <div id="settings-drawer">
   <div id="drawer-header">
-    <span>Dashboard</span>
+    <span>Control Center</span>
     <button id="close-settings" title="Back to chat">✕</button>
   </div>
   <div id="drawer-body">
-    <nav id="settings-nav">
-      <button class="nav-item active" data-tab="overview"><span class="nav-icon">📈</span>Overview</button>
-      <button class="nav-item" data-tab="channels"><span class="nav-icon">🔗</span>Channels</button>
-      <button class="nav-item" data-tab="sessions"><span class="nav-icon">🗂</span>Sessions</button>
-      <button class="nav-item" data-tab="cron"><span class="nav-icon">⏱</span>Cron Jobs</button>
-      <button class="nav-item" data-tab="agents"><span class="nav-icon">⚡</span>Agents</button>
-      <button class="nav-item" data-tab="memory"><span class="nav-icon">🧠</span>Memory</button>
-      <button class="nav-item" data-tab="skills"><span class="nav-icon">🧩</span>Skills</button>
-      <button class="nav-item" data-tab="nodes"><span class="nav-icon">🧠</span>Nodes</button>
-      <button class="nav-item" data-tab="config"><span class="nav-icon">⚙</span>Config</button>
-      <button class="nav-item" data-tab="privacy"><span class="nav-icon">🔒</span>Privacy</button>
-      <div class="nav-divider"></div>
-      <button class="nav-item" data-tab="debug"><span class="nav-icon">🐞</span>Debug</button>
-      <button class="nav-item" data-tab="logs"><span class="nav-icon">🧾</span>Logs</button>
-      <button class="nav-item" data-tab="about"><span class="nav-icon">ℹ</span>About</button>
-      <button class="nav-item" data-tab="appearance"><span class="nav-icon">🎨</span>Appearance</button>
-      <button class="nav-item" data-tab="shortcuts"><span class="nav-icon">⌨</span>Shortcuts</button>
+    <nav id="settings-nav" aria-label="Control center sections">
+      <div class="nav-group-label">Workspace</div>
+      <button class="nav-item active" data-tab="overview"><span class="nav-icon">OV</span>Overview</button>
+      <button class="nav-item" data-tab="sessions"><span class="nav-icon">SE</span>Sessions</button>
+      <button class="nav-item" data-tab="channels"><span class="nav-icon">CH</span>Channels</button>
+      <button class="nav-item" data-tab="cron"><span class="nav-icon">CR</span>Cron Jobs</button>
+      <button class="nav-item" data-tab="agents"><span class="nav-icon">AG</span>Agents</button>
+      <button class="nav-item" data-tab="memory"><span class="nav-icon">ME</span>Memory</button>
+      <button class="nav-item" data-tab="skills"><span class="nav-icon">SK</span>Skills</button>
+      <button class="nav-item" data-tab="nodes"><span class="nav-icon">ND</span>Nodes</button>
+      <div class="nav-group-label">System</div>
+      <button class="nav-item" data-tab="config"><span class="nav-icon">CF</span>Config</button>
+      <button class="nav-item" data-tab="privacy"><span class="nav-icon">PR</span>Privacy</button>
+      <button class="nav-item" data-tab="logs"><span class="nav-icon">LG</span>Logs</button>
+      <button class="nav-item" data-tab="debug"><span class="nav-icon">DG</span>Debug</button>
+      <button class="nav-item" data-tab="appearance"><span class="nav-icon">UI</span>Appearance</button>
+      <button class="nav-item" data-tab="shortcuts"><span class="nav-icon">KB</span>Shortcuts</button>
+      <button class="nav-item" data-tab="about"><span class="nav-icon">AB</span>About</button>
     </nav>
     <div id="settings-panel"></div>
   </div>
@@ -1644,6 +2281,7 @@
   const drawerOverlay = document.getElementById("drawer-overlay");
   const drawerContent = document.getElementById("drawer-content"); // legacy, hidden
   const settingsPanel = document.getElementById("settings-panel");
+  const settingsNav = document.getElementById("settings-nav");
   const navItems = Array.from(document.querySelectorAll(".nav-item"));
   const refreshBtn = document.getElementById("refresh-btn");
 
@@ -1661,6 +2299,8 @@
   const setupSummaryEl = document.getElementById("setup-summary");
   const setupPanes = Array.from(document.querySelectorAll(".setup-pane"));
   const setupStepEls = Array.from(document.querySelectorAll("[data-setup-step-ind]"));
+  const setupStepTitleEl = document.getElementById("setup-step-title");
+  const setupProgressFillEl = document.getElementById("setup-progress-fill");
   const setupKeyHint = document.getElementById("setup-key-hint");
   const setupError = document.getElementById("setup-error");
   const confirmOverlay = document.getElementById("confirm-overlay");
@@ -1713,6 +2353,25 @@
   const NO_KEY_PROVIDERS = new Set(["ollama", "lmstudio"]);
   // Providers that require a custom base URL.
   const NEEDS_BASE_URL = new Set(["openai-compat"]);
+
+  const SETUP_STEP_META = Object.freeze({
+    1: {
+      title: "Step 1 of 4. Select the model provider you want openclio to use.",
+      firstField: "setup-provider",
+    },
+    2: {
+      title: "Step 2 of 4. Add credentials. Local providers can skip API keys.",
+      firstField: "setup-api-key",
+    },
+    3: {
+      title: "Step 3 of 4. Confirm the default model for chat and automation tasks.",
+      firstField: "setup-model",
+    },
+    4: {
+      title: "Step 4 of 4. Review and apply. Config updates are applied immediately.",
+      firstField: "setup-save-btn",
+    },
+  });
 
   // Known models per provider (shown as dropdown options; user can still type custom).
   const PROVIDER_MODELS = {
@@ -1827,7 +2486,7 @@
 
   const APPEARANCE_STORAGE_KEY = "openclio_appearance_v1";
   const DEFAULT_APPEARANCE = Object.freeze({
-    theme: "dark",
+    theme: "light",
     fontScale: 100,
     sidebarVisible: true,
     sidebarWidth: 248,
@@ -1849,7 +2508,7 @@
     } catch (_) {}
 
     return {
-      theme: parsed.theme === "light" ? "light" : "dark",
+      theme: parsed.theme === "dark" ? "dark" : "light",
       fontScale: clampNumber(parsed.fontScale, 85, 125, DEFAULT_APPEARANCE.fontScale),
       sidebarVisible: parsed.sidebarVisible !== false,
       sidebarWidth: clampNumber(parsed.sidebarWidth, 200, 360, DEFAULT_APPEARANCE.sidebarWidth),
@@ -1939,6 +2598,7 @@
 
   function resolveConfirm(result) {
     confirmOverlay.classList.remove("visible");
+    confirmOverlay.setAttribute("aria-hidden", "true");
     if (confirmResolver) {
       const fn = confirmResolver;
       confirmResolver = null;
@@ -1951,6 +2611,7 @@
     confirmMessageEl.textContent = message;
     confirmOKBtn.textContent = confirmLabel;
     confirmOverlay.classList.add("visible");
+    confirmOverlay.setAttribute("aria-hidden", "false");
     return new Promise((resolve) => {
       confirmResolver = resolve;
     });
@@ -2058,6 +2719,7 @@
   function setWhatsAppQROverlayVisible(visible) {
     if (!waQROverlay) return;
     waQROverlay.classList.toggle("visible", visible);
+    waQROverlay.setAttribute("aria-hidden", visible ? "false" : "true");
   }
 
   function paintWhatsAppQRPlaceholder(text) {
@@ -2195,9 +2857,26 @@
     setupError.classList.add("visible");
   }
 
+  function focusSetupFieldForStep(step) {
+    const meta = SETUP_STEP_META[step];
+    if (!meta || !meta.firstField) return;
+    let target = document.getElementById(meta.firstField);
+    if (!target) return;
+    if (step === 2 && NO_KEY_PROVIDERS.has(setupProvider.value)) {
+      target = document.getElementById("setup-model") || target;
+    }
+    if (step === 2 && NEEDS_BASE_URL.has(setupProvider.value) && setupBaseUrl) {
+      target = setupBaseUrl;
+    }
+    if (typeof target.focus === "function") {
+      target.focus();
+    }
+  }
+
   function setSetupOverlayVisible(visible, reason = "") {
     setupRequired = visible;
     setupOverlay.classList.toggle("visible", visible);
+    setupOverlay.setAttribute("aria-hidden", visible ? "false" : "true");
     if (visible) {
       setupStep = 1;
       renderSetupStep();
@@ -2218,14 +2897,28 @@
     const model = setupModel.value.trim() || DEFAULT_MODELS[provider] || "(default)";
     const needsKey = !NO_KEY_PROVIDERS.has(provider);
     const keyState = needsKey ? (setupAPIKey.value.trim() ? "provided" : "missing") : "not required";
-    const baseState = NEEDS_BASE_URL.has(provider) ? (setupBaseUrl.value.trim() || "(required)") : "not required";
+    const baseState = NEEDS_BASE_URL.has(provider) ? (setupBaseUrl.value.trim() || "missing") : "not required";
+    const readiness = (keyState !== "missing") && (baseState !== "missing");
     setupSummaryEl.innerHTML = `
       <b>Provider:</b> ${escapeHTML(provider)}<br>
       <b>Model:</b> ${escapeHTML(model)}<br>
       <b>API key:</b> ${escapeHTML(keyState)}<br>
       <b>Base URL:</b> ${escapeHTML(baseState)}<br><br>
-      Ready to apply setup. This writes credentials to <code>~/.openclio/.env</code> and hot-reloads runtime config.
+      <b>Status:</b> ${readiness ? "ready to apply" : "needs attention"}<br>
+      Applying setup writes credentials to <code>~/.openclio/.env</code> (permission 0600) and hot-reloads runtime config.
     `;
+  }
+
+  function refreshSetupReviewState() {
+    if (setupStep !== 4) return;
+    updateSetupSummary();
+    if (!setupSaveBtn) return;
+    const provider = setupProvider.value;
+    const needsKey = !NO_KEY_PROVIDERS.has(provider);
+    const needsBaseURL = NEEDS_BASE_URL.has(provider);
+    const hasKey = Boolean(setupAPIKey.value.trim());
+    const hasBase = Boolean(setupBaseUrl && setupBaseUrl.value.trim());
+    setupSaveBtn.disabled = (needsKey && !hasKey) || (needsBaseURL && !hasBase);
   }
 
   function renderSetupStep() {
@@ -2240,14 +2933,23 @@
     if (setupBackBtn) setupBackBtn.disabled = setupStep <= 1;
     if (setupNextBtn) {
       setupNextBtn.style.display = setupStep >= 4 ? "none" : "";
-      setupNextBtn.textContent = setupStep === 3 ? "Review" : "Next";
+      setupNextBtn.textContent = setupStep === 3 ? "Review" : "Continue";
     }
     if (setupSaveBtn) {
       setupSaveBtn.style.display = setupStep === 4 ? "" : "none";
+      setupSaveBtn.textContent = "Apply setup";
+      setupSaveBtn.disabled = false;
     }
-    if (setupStep === 4) {
-      updateSetupSummary();
+    if (setupProgressFillEl) {
+      const pct = Math.max(1, Math.min(4, setupStep)) * 25;
+      setupProgressFillEl.style.width = `${pct}%`;
     }
+    if (setupStepTitleEl) {
+      const meta = SETUP_STEP_META[setupStep];
+      setupStepTitleEl.textContent = meta ? meta.title : "";
+    }
+    refreshSetupReviewState();
+    focusSetupFieldForStep(setupStep);
   }
 
   function canAdvanceSetupStep() {
@@ -2258,17 +2960,17 @@
 
     if (setupStep === 2) {
       if (!NO_KEY_PROVIDERS.has(provider) && !apiKey) {
-        showSetupError("API key is required for this provider.");
+        showSetupError("This provider needs an API key. Paste it before continuing.");
         return false;
       }
       if (NEEDS_BASE_URL.has(provider) && !baseURL) {
-        showSetupError("Base URL is required for openai-compat provider.");
+        showSetupError("Custom OpenAI-compatible setup requires a base URL.");
         return false;
       }
     }
     if (setupStep === 3) {
       if (provider === "openai-compat" && !model) {
-        showSetupError("Model is required for openai-compat provider.");
+        showSetupError("Enter a model name for your custom OpenAI-compatible endpoint.");
         return false;
       }
     }
@@ -2302,7 +3004,7 @@
       setupModel.dataset.autoFill = "1";
     }
     if (setupStep === 4) {
-      updateSetupSummary();
+      refreshSetupReviewState();
     }
   }
 
@@ -3518,23 +4220,39 @@
       const uptimeSeconds = Number((overview || {}).uptime_seconds || 0);
       const provider = (((overview || {}).model || {}).provider) || "—";
       const model = (((overview || {}).model || {}).model) || "—";
+      const status = escapeHTML((health && health.status) || "ok");
+      const version = escapeHTML((health && health.version) || "dev");
       settingsPanel.innerHTML = `
-        <div class="setting-section-title">About</div>
-        <div class="stat-row"><span>Status</span><span class="stat-val">${escapeHTML((health && health.status) || "ok")}</span></div>
-        <div class="stat-row"><span>Version</span><span class="stat-val">${escapeHTML((health && health.version) || "dev")}</span></div>
-        <div class="stat-row"><span>Uptime</span><span class="stat-val">${uptimeSeconds.toLocaleString()}s</span></div>
-        <div class="stat-row"><span>Active provider</span><span class="stat-val">${escapeHTML(provider)}</span></div>
-        <div class="stat-row"><span>Active model</span><span class="stat-val">${escapeHTML(model)}</span></div>
-        <div class="stat-row"><span>Data directory</span><span class="stat-val">${escapeHTML(String(dataDir))}</span></div>
-        <div class="stat-row"><span>Auth token</span><span class="stat-val">${escapeHTML(tokenPreview)}</span></div>
+        <div class="control-stack">
+          ${renderKPIGrid([
+            { label: "Status", value: status.toUpperCase() },
+            { label: "Version", value: version },
+            { label: "Provider", value: String(provider) },
+            { label: "Uptime", value: `${uptimeSeconds.toLocaleString()}s` },
+          ])}
 
-        <div class="action-row" style="margin-top:10px">
-          <button class="setting-save-btn" id="about-copy-token-btn">Copy Token</button>
-          <button class="action-btn-secondary" id="about-rotate-token-btn">Rotate Token</button>
-          <button class="action-btn-secondary" id="about-openapi-btn">OpenAPI</button>
-        </div>
-        <div class="hint-text" id="about-rotate-note" style="margin-top:8px">
-          Rotate works only when a rotate-token endpoint is enabled server-side.
+          <div class="control-grid">
+            ${renderControlCard("Runtime", [
+              { label: "Active model", value: model },
+              { label: "Data directory", value: String(dataDir) },
+              { label: "Auth token", value: tokenPreview },
+            ], { subtitle: "Local instance and authentication details", span: 6 })}
+
+            ${renderControlCard("Actions", [], {
+              span: 6,
+              subtitle: "Maintenance and docs",
+              extra: `
+                <div class="action-row" style="margin-top:4px">
+                  <button class="setting-save-btn" id="about-copy-token-btn">Copy Token</button>
+                  <button class="action-btn-secondary" id="about-rotate-token-btn">Rotate Token</button>
+                  <button class="action-btn-secondary" id="about-openapi-btn">OpenAPI</button>
+                </div>
+                <div class="hint-text" id="about-rotate-note" style="margin-top:8px">
+                  Rotate works only when a rotate-token endpoint is enabled server-side.
+                </div>
+              `
+            })}
+          </div>
         </div>
       `;
 
@@ -3691,6 +4409,43 @@
     return `<span style="color:${color};font-weight:600">${text}</span>`;
   }
 
+  function renderStatRows(rows) {
+    return (rows || []).map((row) => {
+      const label = escapeHTML(String(row && row.label ? row.label : ""));
+      const raw = Boolean(row && row.raw);
+      const value = raw
+        ? String(row && row.value != null ? row.value : "")
+        : escapeHTML(String(row && row.value != null ? row.value : "—"));
+      return `<div class="stat-row"><span>${label}</span><span class="stat-val">${value}</span></div>`;
+    }).join("");
+  }
+
+  function renderKPIGrid(items) {
+    const html = (items || []).map((item) => `
+      <div class="kpi-item">
+        <div class="kpi-label">${escapeHTML(String(item && item.label ? item.label : ""))}</div>
+        <div class="kpi-value">${escapeHTML(String(item && item.value != null ? item.value : "0"))}</div>
+      </div>
+    `).join("");
+    return `<div class="kpi-grid">${html}</div>`;
+  }
+
+  function renderControlCard(title, rows, opts = {}) {
+    const subtitle = opts && opts.subtitle ? `<div class="control-card-subtitle">${escapeHTML(String(opts.subtitle))}</div>` : "";
+    const extra = opts && opts.extra ? String(opts.extra) : "";
+    const wide = opts && opts.wide ? " wide" : "";
+    const span = Math.max(1, Math.min(12, Number(opts && opts.span ? opts.span : 4)));
+    const spanStyle = opts && opts.wide ? "" : ` style="grid-column: span ${span}"`;
+    return `
+      <section class="control-card${wide}"${spanStyle}>
+        <div class="control-card-title">${escapeHTML(String(title || ""))}</div>
+        ${subtitle}
+        ${renderStatRows(rows)}
+        ${extra}
+      </section>
+    `;
+  }
+
   async function renderOverviewTab() {
     settingsPanel.innerHTML = `<div class="hint-text">Loading overview...</div>`;
     try {
@@ -3698,24 +4453,54 @@
       const usage = d.usage || {};
       const counts = d.counts || {};
       const model = d.model || {};
+      const status = String(d.status || "ok");
+      const setupRequiredNow = Boolean(d.setup_required);
+
       settingsPanel.innerHTML = `
-        <div class="setting-section-title">Overview</div>
-        <div class="stat-row"><span>Status</span><span class="stat-val">${escapeHTML(d.status || "ok")}</span></div>
-        <div class="stat-row"><span>Setup required</span><span class="stat-val">${escapeHTML(String(Boolean(d.setup_required)))}</span></div>
-        <div class="stat-row"><span>Uptime</span><span class="stat-val">${Number(d.uptime_seconds || 0).toLocaleString()}s</span></div>
-        <div class="stat-row"><span>Provider</span><span class="stat-val">${escapeHTML(model.provider || "—")}</span></div>
-        <div class="stat-row"><span>Model</span><span class="stat-val">${escapeHTML(model.model || "—")}</span></div>
-        <div class="setting-section-title">Usage</div>
-        <div class="stat-row"><span>LLM calls</span><span class="stat-val">${Number(usage.llm_calls || 0).toLocaleString()}</span></div>
-        <div class="stat-row"><span>Input tokens</span><span class="stat-val">${Number(usage.input_tokens || 0).toLocaleString()}</span></div>
-        <div class="stat-row"><span>Output tokens</span><span class="stat-val">${Number(usage.output_tokens || 0).toLocaleString()}</span></div>
-        <div class="stat-row"><span>Estimated cost</span><span class="stat-val">$${Number(usage.estimated_cost || 0).toFixed(6)}</span></div>
-        <div class="setting-section-title">Counts</div>
-        <div class="stat-row"><span>Sessions</span><span class="stat-val">${Number(counts.sessions || 0).toLocaleString()}</span></div>
-        <div class="stat-row"><span>Channels</span><span class="stat-val">${Number(counts.channels || 0).toLocaleString()}</span></div>
-        <div class="stat-row"><span>Cron jobs</span><span class="stat-val">${Number(counts.cron_jobs || 0).toLocaleString()}</span></div>
-        <div class="stat-row"><span>Skills</span><span class="stat-val">${Number(counts.skills || 0).toLocaleString()}</span></div>
+        <div class="control-stack">
+          ${renderKPIGrid([
+            { label: "Status", value: status.toUpperCase() },
+            { label: "Provider", value: String(model.provider || "—") },
+            { label: "Model", value: String(model.model || "—") },
+            { label: "Uptime", value: `${Number(d.uptime_seconds || 0).toLocaleString()}s` },
+          ])}
+
+          <div class="control-grid">
+            ${renderControlCard("Runtime", [
+              { label: "Setup required", value: setupRequiredNow ? "yes" : "no" },
+              { label: "Channel adapters", value: Number(counts.channels || 0).toLocaleString() },
+              { label: "Cron jobs", value: Number(counts.cron_jobs || 0).toLocaleString() },
+              { label: "Skills", value: Number(counts.skills || 0).toLocaleString() },
+            ], {
+              subtitle: "Current operational state",
+              extra: setupRequiredNow ? `<div class="action-row"><button class="setting-save-btn" id="overview-open-setup-btn" style="width:100%">Complete setup</button></div>` : "",
+            })}
+
+            ${renderControlCard("Usage", [
+              { label: "LLM calls", value: Number(usage.llm_calls || 0).toLocaleString() },
+              { label: "Input tokens", value: Number(usage.input_tokens || 0).toLocaleString() },
+              { label: "Output tokens", value: Number(usage.output_tokens || 0).toLocaleString() },
+              { label: "Estimated cost", value: `$${Number(usage.estimated_cost || 0).toFixed(6)}` },
+            ], { subtitle: "This session and recent totals" })}
+
+            ${renderControlCard("Workspace", [
+              { label: "Sessions", value: Number(counts.sessions || 0).toLocaleString() },
+              { label: "Model health", value: status },
+              { label: "Setup reason", value: String(d.setup_reason || "none") },
+            ], { subtitle: "Data and readiness snapshot" })}
+          </div>
+        </div>
       `;
+
+      const setupBtn = document.getElementById("overview-open-setup-btn");
+      if (setupBtn) {
+        setupBtn.addEventListener("click", async () => {
+          const required = await checkSetupRequired();
+          if (!required) {
+            showToast("Setup is already complete.", false);
+          }
+        });
+      }
     } catch (err) {
       settingsPanel.innerHTML = `<div class="hint-text">Overview failed: ${escapeHTML(err.message)}</div>`;
     }
@@ -3877,56 +4662,76 @@
     try {
       const report = await apiFetch("/api/v1/privacy");
       const providers = Array.isArray(report.providers) ? report.providers : [];
+      const scrubOutput = Boolean(report && report.privacy && report.privacy.scrub_output);
+      const totals = report.totals || {};
+      const redacted = Number((report.privacy && report.privacy.secrets_redacted) || 0);
 
       settingsPanel.innerHTML = `
-        <div class="setting-section-title">Privacy Report</div>
-        <div class="stat-row"><span>Tool output scrubbing</span><span class="stat-val">${report.privacy && report.privacy.scrub_output ? "ON" : "OFF"}</span></div>
-        <div class="stat-row"><span>Secrets redacted</span><span class="stat-val">${Number((report.privacy && report.privacy.secrets_redacted) || 0).toLocaleString()}</span></div>
-        <div class="stat-row"><span>Total API calls</span><span class="stat-val">${Number((report.totals && report.totals.calls) || 0).toLocaleString()}</span></div>
-        <div class="stat-row"><span>Input tokens</span><span class="stat-val">${Number((report.totals && report.totals.input_tokens) || 0).toLocaleString()}</span></div>
-        <div class="stat-row"><span>Output tokens</span><span class="stat-val">${Number((report.totals && report.totals.output_tokens) || 0).toLocaleString()}</span></div>
-        <div class="stat-row"><span>Estimated cost (USD)</span><span class="stat-val">$${Number((report.totals && report.totals.estimated_cost) || 0).toFixed(6)}</span></div>
+        <div class="control-stack">
+          ${renderKPIGrid([
+            { label: "Scrubbing", value: scrubOutput ? "ON" : "OFF" },
+            { label: "Secrets redacted", value: redacted.toLocaleString() },
+            { label: "API calls", value: Number(totals.calls || 0).toLocaleString() },
+            { label: "Est. Cost", value: `$${Number(totals.estimated_cost || 0).toFixed(4)}` },
+          ])}
+          <div class="control-grid">
+            ${renderControlCard("Token Totals", [
+              { label: "Input tokens", value: Number(totals.input_tokens || 0).toLocaleString() },
+              { label: "Output tokens", value: Number(totals.output_tokens || 0).toLocaleString() },
+              { label: "Provider entries", value: Number(providers.length || 0).toLocaleString() },
+            ], { subtitle: "Privacy and usage telemetry snapshot", span: 6 })}
 
-        <div class="setting-section-title">Provider Breakdown</div>
-        <div class="table-wrap">
-          <table class="log-table">
-            <thead><tr><th>Provider</th><th>Calls</th><th>Input</th><th>Output</th><th>Cost</th><th>Privacy</th></tr></thead>
-            <tbody>
-              ${providers.length ? providers.map((p) => `
-                <tr>
-                  <td>${escapeHTML(String(p.provider || "unknown"))}</td>
-                  <td>${Number(p.calls || 0).toLocaleString()}</td>
-                  <td>${Number(p.input_tokens || 0).toLocaleString()}</td>
-                  <td>${Number(p.output_tokens || 0).toLocaleString()}</td>
-                  <td>$${Number(p.estimated_cost || 0).toFixed(6)}</td>
-                  <td>${String(p.privacy || "cloud") === "local" ? "local" : "cloud"}</td>
-                </tr>
-              `).join("") : `<tr><td colspan="6" class="hint-text">No provider activity yet.</td></tr>`}
-            </tbody>
-          </table>
+            ${renderControlCard("Token Distribution", [], {
+              span: 6,
+              subtitle: "Input + output tokens by provider",
+              extra: `<div style="max-width:420px"><canvas id="privacy-chart" height="180"></canvas></div>`
+            })}
+
+            ${renderControlCard("Provider Breakdown", [], {
+              wide: true,
+              subtitle: "Per-provider volume, cost, and privacy mode",
+              extra: `
+                <div class="table-wrap">
+                  <table class="log-table">
+                    <thead><tr><th>Provider</th><th>Calls</th><th>Input</th><th>Output</th><th>Cost</th><th>Privacy</th></tr></thead>
+                    <tbody>
+                      ${providers.length ? providers.map((p) => `
+                        <tr>
+                          <td>${escapeHTML(String(p.provider || "unknown"))}</td>
+                          <td>${Number(p.calls || 0).toLocaleString()}</td>
+                          <td>${Number(p.input_tokens || 0).toLocaleString()}</td>
+                          <td>${Number(p.output_tokens || 0).toLocaleString()}</td>
+                          <td>$${Number(p.estimated_cost || 0).toFixed(6)}</td>
+                          <td>${String(p.privacy || "cloud") === "local" ? "local" : "cloud"}</td>
+                        </tr>
+                      `).join("") : `<tr><td colspan="6" class="hint-text">No provider activity yet.</td></tr>`}
+                    </tbody>
+                  </table>
+                </div>
+              `
+            })}
+          </div>
         </div>
-
-        <div class="setting-section-title">Token Distribution</div>
-        <div style="max-width:420px"><canvas id="privacy-chart" height="180"></canvas></div>
       `;
 
       if (window.Chart && providers.length > 0) {
         const ctx = document.getElementById("privacy-chart");
         if (ctx) {
+          const textColor = getComputedStyle(document.body).getPropertyValue("--text").trim() || "#16261f";
           privacyChart = new Chart(ctx, {
             type: "doughnut",
             data: {
               labels: providers.map((p) => String(p.provider || "unknown")),
               datasets: [{
                 data: providers.map((p) => Number(p.input_tokens || 0) + Number(p.output_tokens || 0)),
-                backgroundColor: ["#7c6af7", "#22c55e", "#f59e0b", "#ef4444", "#3b82f6", "#14b8a6"]
+                backgroundColor: ["#0f8a78", "#22c55e", "#f59e0b", "#ef4444", "#0ea5e9", "#14b8a6"]
               }]
             },
             options: {
               responsive: true,
               plugins: {
                 legend: {
-                  labels: { color: "#e2e4f0" }
+                  labels: { color: textColor }
                 }
               }
             }
@@ -4710,7 +5515,17 @@
     try {
       const d = await apiFetch("/api/v1/nodes");
       const servers = Array.isArray(d.mcp_servers) ? d.mcp_servers : [];
-      const mcpTools = Array.isArray(d.mcp_tools) ? d.mcp_tools : [];
+      const runtimeTools = Array.isArray(d.tools) ? d.tools : [];
+      const mcpTools = Array.isArray(d.mcp_tools)
+        ? d.mcp_tools
+        : runtimeTools.filter((name) => String(name || "").startsWith("mcp_"));
+      const builtInTools = Array.isArray(d.built_in_tools)
+        ? d.built_in_tools
+        : runtimeTools.filter((name) => !String(name || "").startsWith("mcp_"));
+      const blockedTools = Array.isArray(d.blocked_tools) ? d.blocked_tools : [];
+      const blockedSet = new Set(blockedTools.map((name) => String(name || "")));
+      const catalogTools = Array.isArray(d.catalog_tools) ? d.catalog_tools : [];
+      const catalogOnlyTools = Array.isArray(d.catalog_only_tools) ? d.catalog_only_tools : [];
       let html = `
         <div class="setting-section-title">MCP Servers (${servers.length})</div>
       `;
@@ -4735,6 +5550,23 @@
           `;
         });
       }
+      html += `<div class="setting-section-title">Runtime Tool Inventory</div>`;
+      html += `<div class="stat-row"><span>Total</span><span class="stat-val">${Number(d.tools_total || runtimeTools.length)}</span></div>`;
+      html += `<div class="stat-row"><span>Built-in</span><span class="stat-val">${Number(d.built_in_total || builtInTools.length)}</span></div>`;
+      html += `<div class="stat-row"><span>MCP</span><span class="stat-val">${Number(d.mcp_total || mcpTools.length)}</span></div>`;
+      html += `<div class="stat-row"><span>Blocked by policy</span><span class="stat-val">${Number(d.blocked_total || blockedTools.length)}</span></div>`;
+
+      html += `<div class="setting-section-title">Built-in Tools (${builtInTools.length})</div>`;
+      if (builtInTools.length === 0) {
+        html += `<div class="hint-text">No built-in runtime tools loaded.</div>`;
+      } else {
+        builtInTools.forEach((t) => {
+          const name = String(t || "");
+          const blocked = blockedSet.has(name);
+          html += `<div class="stat-row"><span>${escapeHTML(name)}</span><span class="stat-val">${blocked ? "blocked" : "ready"}</span></div>`;
+        });
+      }
+
       html += `<div class="setting-section-title">MCP Tools (${mcpTools.length})</div>`;
       if (mcpTools.length === 0) {
         html += `<div class="hint-text">No MCP tools loaded.</div>`;
@@ -4742,6 +5574,15 @@
         mcpTools.forEach((t) => {
           html += `<div class="stat-row"><span>${escapeHTML(String(t))}</span><span class="stat-val">ready</span></div>`;
         });
+      }
+      html += `<div class="setting-section-title">Tool Catalog (${catalogTools.length})</div>`;
+      if (catalogTools.length === 0) {
+        html += `<div class="hint-text">No catalog tools discovered.</div>`;
+      } else if (catalogOnlyTools.length === 0) {
+        html += `<div class="hint-text">All catalog tools are loaded into runtime.</div>`;
+      } else {
+        html += `<div class="hint-text">${catalogOnlyTools.length} catalog tools are not wired into the active runtime.</div>`;
+        html += `<pre class="action-output" style="max-height:28vh">${escapeHTML(catalogOnlyTools.join("\n"))}</pre>`;
       }
       html += `<div class="setting-section-title">gRPC</div>`;
       html += `<div class="stat-row"><span>Enabled</span><span class="stat-val">${boolPill(d.grpc && d.grpc.enabled)}</span></div>`;
@@ -5130,7 +5971,11 @@
 
   function switchTab(tabName) {
     const normalized = normalizeDashboardTab(tabName);
-    navItems.forEach((n) => n.classList.toggle("active", n.dataset.tab === normalized));
+    navItems.forEach((n) => {
+      const active = n.dataset.tab === normalized;
+      n.classList.toggle("active", active);
+      n.setAttribute("aria-current", active ? "page" : "false");
+    });
 
     const cfg = currentConfig || {};
     switch (normalized) {
@@ -5493,22 +6338,42 @@
   navItems.forEach((item) => {
     item.addEventListener("click", () => navigateToDashboard(item.dataset.tab));
   });
+  if (settingsNav) {
+    settingsNav.addEventListener("keydown", (e) => {
+      const key = e.key;
+      if (!["ArrowDown", "ArrowUp", "ArrowRight", "ArrowLeft", "Home", "End"].includes(key)) {
+        return;
+      }
+      const focusedIdx = navItems.findIndex((item) => item === document.activeElement);
+      if (focusedIdx === -1) return;
+      e.preventDefault();
+
+      let nextIdx = focusedIdx;
+      if (key === "Home") nextIdx = 0;
+      if (key === "End") nextIdx = navItems.length - 1;
+      if (key === "ArrowDown" || key === "ArrowRight") nextIdx = (focusedIdx + 1) % navItems.length;
+      if (key === "ArrowUp" || key === "ArrowLeft") nextIdx = (focusedIdx - 1 + navItems.length) % navItems.length;
+
+      const target = navItems[nextIdx];
+      if (target) target.focus();
+    });
+  }
   setupProvider.addEventListener("change", handleSetupProviderChange);
   setupModel.addEventListener("input", () => {
     setupModel.dataset.autoFill = "0";
     if (setupStep === 4) {
-      updateSetupSummary();
+      refreshSetupReviewState();
     }
   });
   setupAPIKey.addEventListener("input", () => {
     if (setupStep === 4) {
-      updateSetupSummary();
+      refreshSetupReviewState();
     }
   });
   if (setupBaseUrl) {
     setupBaseUrl.addEventListener("input", () => {
       if (setupStep === 4) {
-        updateSetupSummary();
+        refreshSetupReviewState();
       }
     });
   }

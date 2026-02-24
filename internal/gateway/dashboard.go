@@ -26,6 +26,7 @@ import (
 	"github.com/openclio/openclio/internal/plugin"
 	"github.com/openclio/openclio/internal/privacy"
 	"github.com/openclio/openclio/internal/storage"
+	"github.com/openclio/openclio/internal/tools"
 	"github.com/openclio/openclio/internal/workspace"
 	"rsc.io/qr"
 )
@@ -480,8 +481,9 @@ func (h *Handlers) ChannelAllowlistMode(w http.ResponseWriter, r *http.Request) 
 }
 
 type channelActionPayload struct {
-	Name   string `json:"name"`
-	Action string `json:"action"`
+	Name           string `json:"name"`
+	Action         string `json:"action"`
+	ForceReconnect bool   `json:"force_reconnect,omitempty"`
 }
 
 // ChannelAction provides baseline channel control hooks.
@@ -507,14 +509,32 @@ func (h *Handlers) ChannelAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var found any
+	channelKnown := false
+	var found map[string]any
 	for _, st := range h.manager.Statuses() {
 		if st.Name == name {
-			found = st
+			channelKnown = true
+			found = map[string]any{
+				"name":                 st.Name,
+				"running":              st.Running,
+				"healthy":              st.Healthy,
+				"last_health_check":    st.LastHealthCheck,
+				"last_health_error":    st.LastHealthError,
+				"restart_count":        st.RestartCount,
+				"consecutive_failures": st.ConsecutiveFailures,
+				"last_start":           st.LastStart,
+				"last_error":           st.LastError,
+			}
 			break
 		}
 	}
-	if found == nil {
+	if !channelKnown {
+		switch name {
+		case "webchat", "telegram", "discord", "whatsapp", "slack":
+			channelKnown = true
+		}
+	}
+	if !channelKnown {
 		writeError(w, http.StatusNotFound, "channel not found")
 		return
 	}
@@ -528,11 +548,84 @@ func (h *Handlers) ChannelAction(w http.ResponseWriter, r *http.Request) {
 			"status":  found,
 			"message": "status refreshed",
 		})
-	case "restart", "connect", "disconnect":
-		writeError(w, http.StatusNotImplemented, "runtime channel lifecycle action is not yet implemented")
+	case "connect":
+		if h.channelControl == nil {
+			writeError(w, http.StatusServiceUnavailable, "runtime channel connect is not available")
+			return
+		}
+		credentials := map[string]string{}
+		if name == "whatsapp" && payload.ForceReconnect {
+			credentials["force_reconnect"] = "true"
+		}
+		if err := h.channelControl.ConnectChannel(name, credentials); err != nil {
+			writeError(w, http.StatusBadRequest, "connect failed: "+err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"ok":      true,
+			"name":    name,
+			"action":  action,
+			"status":  latestChannelStatus(h.manager, name),
+			"message": "connect requested",
+		})
+	case "disconnect":
+		if h.channelLife == nil {
+			writeError(w, http.StatusServiceUnavailable, "runtime channel disconnect is not available")
+			return
+		}
+		if err := h.channelLife.DisconnectChannel(name); err != nil {
+			writeError(w, http.StatusBadRequest, "disconnect failed: "+err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"ok":      true,
+			"name":    name,
+			"action":  action,
+			"status":  latestChannelStatus(h.manager, name),
+			"message": "disconnect requested",
+		})
+	case "restart":
+		if h.channelLife == nil || h.channelControl == nil {
+			writeError(w, http.StatusServiceUnavailable, "runtime channel restart is not available")
+			return
+		}
+		if err := h.channelLife.DisconnectChannel(name); err != nil {
+			lower := strings.ToLower(err.Error())
+			if !strings.Contains(lower, "not connected") {
+				writeError(w, http.StatusBadRequest, "restart failed: "+err.Error())
+				return
+			}
+		}
+		credentials := map[string]string{}
+		if name == "whatsapp" {
+			credentials["force_reconnect"] = "true"
+		}
+		if err := h.channelControl.ConnectChannel(name, credentials); err != nil {
+			writeError(w, http.StatusBadRequest, "restart failed: "+err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"ok":      true,
+			"name":    name,
+			"action":  action,
+			"status":  latestChannelStatus(h.manager, name),
+			"message": "restart requested",
+		})
 	default:
 		writeError(w, http.StatusBadRequest, "action must be one of: ping|refresh|restart|connect|disconnect")
 	}
+}
+
+func latestChannelStatus(manager *plugin.Manager, name string) any {
+	if manager == nil {
+		return nil
+	}
+	for _, st := range manager.Statuses() {
+		if st.Name == name {
+			return st
+		}
+	}
+	return nil
 }
 
 // Instances returns local runtime process and gateway instance information.
@@ -1322,11 +1415,28 @@ func (h *Handlers) Nodes(w http.ResponseWriter, r *http.Request) {
 		toolNames = h.agent.ToolNames()
 	}
 	sort.Strings(toolNames)
+	runtimeSet := make(map[string]struct{}, len(toolNames))
+	builtInTools := make([]string, 0, len(toolNames))
 	mcpTools := make([]string, 0)
+	blockedTools := make([]string, 0)
 	for _, name := range toolNames {
+		runtimeSet[name] = struct{}{}
+		if !tools.IsToolAllowed(name) {
+			blockedTools = append(blockedTools, name)
+		}
 		if strings.HasPrefix(name, "mcp_") {
 			mcpTools = append(mcpTools, name)
+			continue
 		}
+		builtInTools = append(builtInTools, name)
+	}
+	catalogTools := tools.ListTools()
+	catalogOnlyTools := make([]string, 0, len(catalogTools))
+	for _, name := range catalogTools {
+		if _, ok := runtimeSet[name]; ok {
+			continue
+		}
+		catalogOnlyTools = append(catalogOnlyTools, name)
 	}
 
 	grpcPort := 0
@@ -1336,12 +1446,30 @@ func (h *Handlers) Nodes(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"mcp_servers": servers,
-		"mcp_tools":   mcpTools,
+		"runtime_tools": map[string]any{
+			"all":          toolNames,
+			"built_in":     builtInTools,
+			"mcp":          mcpTools,
+			"blocked":      blockedTools,
+			"catalog":      catalogTools,
+			"catalog_only": catalogOnlyTools,
+		},
+		"tools":              toolNames,
+		"built_in_tools":     builtInTools,
+		"mcp_tools":          mcpTools,
+		"blocked_tools":      blockedTools,
+		"catalog_tools":      catalogTools,
+		"catalog_only_tools": catalogOnlyTools,
 		"grpc": map[string]any{
 			"enabled": grpcPort > 0,
 			"port":    grpcPort,
 		},
-		"tools_total": len(toolNames),
+		"tools_total":        len(toolNames),
+		"built_in_total":     len(builtInTools),
+		"mcp_total":          len(mcpTools),
+		"blocked_total":      len(blockedTools),
+		"catalog_total":      len(catalogTools),
+		"catalog_only_total": len(catalogOnlyTools),
 	})
 }
 
