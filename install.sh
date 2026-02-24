@@ -1,23 +1,71 @@
 #!/usr/bin/env sh
-# install.sh — Install openclio for your platform.
-# Usage: curl -sSL https://raw.githubusercontent.com/openclio/openclio/main/install.sh | sh
+# install.sh — friendly installer for openclio
+# Usage:
+#   curl -fsSL https://raw.githubusercontent.com/openclio/openclio/main/install.sh | sh
 
-set -e
+set -eu
 
 REPO="openclio/openclio"
 BINARY="openclio"
-OS=$(uname -s | tr '[:upper:]' '[:lower:]')
-RAW_ARCH=$(uname -m)
 
+# Defaults (can be overridden with env vars)
+DEFAULT_INSTALL_DIR="/usr/local/bin"
+INSTALL_DIR="${OPENCLIO_INSTALL_DIR:-${DEFAULT_INSTALL_DIR}}"
+
+# Color helpers (no color if not a terminal)
+if [ -t 1 ]; then
+  RED='\033[0;31m'
+  GREEN='\033[0;32m'
+  YELLOW='\033[0;33m'
+  BLUE='\033[0;34m'
+  BOLD='\033[1m'
+  RESET='\033[0m'
+else
+  RED='' GREEN='' YELLOW='' BLUE='' BOLD='' RESET=''
+fi
+
+info()   { printf "%b\n" "${BLUE}➜${RESET} $*"; }
+ok()     { printf "%b\n" "${GREEN}✓${RESET} $*"; }
+warn()   { printf "%b\n" "${YELLOW}⚠${RESET} $*"; }
+err()    { printf "%b\n" "${RED}✗${RESET} $*" >&2; }
+
+usage() {
+  cat <<EOF
+Usage: install.sh [--version <tag>] [--install-dir <path>]
+
+Installs the ${BINARY} binary into a standard location.
+Options:
+  --version     Release tag to install (default: latest)
+  --install-dir Custom installation directory (default: ${INSTALL_DIR})
+EOF
+  exit 1
+}
+
+# Parse args (simple)
+VERSION=""
+SKIP_INIT=0
+while [ "${#}" -gt 0 ]; do
+  case "$1" in
+    --version) shift; VERSION="$1"; shift ;;
+    --install-dir) shift; INSTALL_DIR="$1"; shift ;;
+    --no-init) shift; SKIP_INIT=1 ;;
+    --help|-h) usage ;;
+    *) err "Unknown arg: $1"; usage ;;
+  esac
+done
+
+# Platform detection
+OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
+RAW_ARCH="$(uname -m)"
 case "${RAW_ARCH}" in
-  x86_64)  ARCH="amd64" ;;
-  aarch64) ARCH="arm64" ;;
-  arm64)   ARCH="arm64" ;;
-  *)
-    echo "✗ Unsupported architecture: ${RAW_ARCH}"
-    echo "  Download manually: https://github.com/${REPO}/releases"
-    exit 1
-    ;;
+  x86_64|amd64) ARCH="amd64" ;;
+  aarch64|arm64) ARCH="arm64" ;;
+  armv7l|armv7)  ARCH="armv7" ;;
+  *) err "Unsupported architecture: ${RAW_ARCH}"; exit 1 ;;
+esac
+case "${OS}" in
+  linux|darwin) ;; 
+  *) err "Unsupported OS: ${OS}"; exit 1 ;;
 esac
 
 case "${OS}" in
@@ -87,19 +135,24 @@ ARCHIVE="${BINARY}-${VERSION}-${OS}-${ARCH}.tar.gz"
 URL="https://github.com/${REPO}/releases/download/${VERSION}/${ARCHIVE}"
 TMP_DIR=$(mktemp -d)
 
-echo "  Downloading..."
-if ! curl -sSfL "${URL}" -o "${TMP_DIR}/${ARCHIVE}"; then
-  echo ""
-  echo "✗ Download failed: ${URL}"
-  echo "  Download manually: https://github.com/${REPO}/releases"
+info "Downloading ${ARCHIVE}..."
+if ! curl -fsSL "${URL}" -o "${TMP_DIR}/${ARCHIVE}"; then
+  err "Download failed: ${URL}"
+  err "Download manually: https://github.com/${REPO}/releases"
   rm -rf "${TMP_DIR}"
   exit 1
 fi
+ok "Downloaded ${ARCHIVE}"
 
-# ── Extract & install ─────────────────────────────────────────────────────────
-echo "  Installing..."
-tar -xzf "${TMP_DIR}/${ARCHIVE}" -C "${TMP_DIR}"
-chmod +x "${TMP_DIR}/${BINARY}-${VERSION}-${OS}-${ARCH}"
+info "Extracting archive..."
+if ! tar -xzf "${TMP_DIR}/${ARCHIVE}" -C "${TMP_DIR}"; then
+  err "Failed to extract archive"
+  rm -rf "${TMP_DIR}"
+  exit 1
+fi
+ok "Archive extracted"
+
+info "Installing to ${INSTALL_DIR}..."
 if [ "${USE_SUDO}" -eq 1 ]; then
   sudo mkdir -p "${INSTALL_DIR}"
   sudo install -m 0755 "${TMP_DIR}/${BINARY}-${VERSION}-${OS}-${ARCH}" "${INSTALL_DIR}/${BINARY}"
@@ -107,33 +160,39 @@ else
   mkdir -p "${INSTALL_DIR}"
   install -m 0755 "${TMP_DIR}/${BINARY}-${VERSION}-${OS}-${ARCH}" "${INSTALL_DIR}/${BINARY}"
 fi
-rm -rf "${TMP_DIR}"
+ok "Installed ${INSTALL_DIR}/${BINARY}"
 
 if [ ! -x "${INSTALL_DIR}/${BINARY}" ]; then
-  echo ""
-  echo "✗ Install failed: ${INSTALL_DIR}/${BINARY} is missing or not executable"
+  err "Install failed: ${INSTALL_DIR}/${BINARY} is missing or not executable"
   exit 1
 fi
 
-# ── Done ──────────────────────────────────────────────────────────────────────
-echo ""
-echo "─────────────────────────────────────────────────────────────────────────"
-echo ""
-echo "  ✓ openclio ${VERSION} installed successfully!"
-echo ""
-echo "  Next steps:"
-echo "    1. Run setup wizard    →  openclio init"
-echo "    2. Choose provider     →  Select Ollama/OpenAI/Anthropic/Gemini in the wizard"
-echo "    3. Set credentials     →  Use the env var shown by the wizard (if required)"
-echo "    4. Start chatting      →  openclio"
-echo ""
 
-# PATH hint
+# ── Done ──────────────────────────────────────────────────────────────────────
+printf "\n"
+echo "─────────────────────────────────────────────────────────────────────────"
+printf "\n"
+ok "openclio ${VERSION} installed successfully!"
+printf "\n"
+
+# Ensure install dir is on PATH hint
 if ! echo ":${PATH}:" | grep -q ":${INSTALL_DIR}:"; then
-  echo "  Note: Add ${INSTALL_DIR} to your PATH:"
-  echo "    echo 'export PATH=\"${INSTALL_DIR}:\$PATH\"' >> ~/.zshrc && source ~/.zshrc"
-  echo "  Or run directly now:"
-  echo "    ${INSTALL_DIR}/${BINARY} init"
+  warn "Add ${INSTALL_DIR} to your PATH to run 'openclio' directly."
+  info "  echo 'export PATH=\"${INSTALL_DIR}:\$PATH\"' >> ~/.zshrc && source ~/.zshrc"
+  printf "\n"
+fi
+
+if [ "${SKIP_INIT:-0}" -eq 0 ]; then
+  info "Starting interactive setup wizard now — this will guide you to select a model and configure providers/accounts."
+  # Run the init command from the installed location so it's deterministic.
+  "${INSTALL_DIR}/${BINARY}" init
+  ok "Setup complete. To start the server in foreground: ${INSTALL_DIR}/${BINARY} serve"
+  info "To run in background use your system's service manager or a terminal multiplexer (tmux/screen)."
+else
+  echo ""
+  echo "Next steps:"
+  echo "  1) Run setup wizard: ${INSTALL_DIR}/${BINARY} init"
+  echo "  2) Start server (foreground): ${INSTALL_DIR}/${BINARY} serve"
   echo ""
 fi
 
