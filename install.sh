@@ -182,19 +182,63 @@ if ! echo ":${PATH}:" | grep -q ":${INSTALL_DIR}:"; then
   printf "\n"
 fi
 
+# By default run setup and start the server automatically.
+START_AFTER_INSTALL=1
 if [ "${SKIP_INIT:-0}" -eq 0 ]; then
   info "Starting interactive setup wizard now — this will guide you to select a model and configure providers/accounts."
   # Run the init command from the installed location so it's deterministic.
   "${INSTALL_DIR}/${BINARY}" init
-  ok "Setup complete. To start the server in foreground: ${INSTALL_DIR}/${BINARY} serve"
-  info "To run in background use your system's service manager or a terminal multiplexer (tmux/screen)."
+  ok "Setup complete."
 else
   echo ""
   echo "Next steps:"
   echo "  1) Run setup wizard: ${INSTALL_DIR}/${BINARY} init"
-  echo "  2) Start server (foreground): ${INSTALL_DIR}/${BINARY} serve"
-  echo ""
 fi
+
+# If requested, start the server in background and open the web UI.
+if [ "${START_AFTER_INSTALL}" -eq 1 ]; then
+  DATA_DIR="${HOME}/.openclio"
+  PID_FILE="${DATA_DIR}/openclio.pid"
+  LOG_FILE="${DATA_DIR}/openclio.log"
+  mkdir -p "${DATA_DIR}"
+
+  info "Starting openclio server in background..."
+  nohup "${INSTALL_DIR}/${BINARY}" serve >> "${LOG_FILE}" 2>&1 &
+  echo $! > "${PID_FILE}"
+  sleep 1
+
+  # Wait for auth token to appear (server writes it on startup)
+  TOKEN_FILE="${DATA_DIR}/auth.token"
+  i=0
+  TOKEN=""
+  while [ "${i}" -lt 20 ]; do
+    if [ -f "${TOKEN_FILE}" ]; then
+      TOKEN="$(tr -d '[:space:]' < "${TOKEN_FILE}")" || true
+      break
+    fi
+    i=$((i+1))
+    sleep 0.5
+  done
+
+  UI_URL="http://127.0.0.1:18789"
+  if [ -n "${TOKEN}" ]; then
+    UI_URL="${UI_URL}/?token=${TOKEN}"
+  fi
+
+  info "Opening web UI: ${UI_URL}"
+  case "$(uname -s)" in
+    Darwin) open "${UI_URL}" ;;
+    Linux) xdg-open "${UI_URL}" >/dev/null 2>&1 || true ;;
+    *) printf "Open your browser at: %s\n" "${UI_URL}" ;;
+  esac
+
+  ok "Server started (pid $(cat "${PID_FILE}")) — logs: ${LOG_FILE}"
+else
+  info "Server start skipped. Use: ${INSTALL_DIR}/${BINARY} serve"
+fi
+
+echo "─────────────────────────────────────────────────────────────────────────"
+echo ""
 
 echo "─────────────────────────────────────────────────────────────────────────"
 echo ""
