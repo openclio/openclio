@@ -36,12 +36,18 @@ func runInit(dataDir string) {
 		os.Exit(1)
 	}
 
-	// Seed bundled default skills without overwriting any existing user skills.
+	assistantName := promptString("What should your assistant be called? [Aria]", "Aria")
+
+	// Install complete template set (SOUL.md, VISION.md, AGENTS.md, skills)
+	// This gives users the full "sourcefull" agent experience.
+	if err := workspace.InstallDefaults(dataDir, assistantName); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: failed to install default templates: %v\n", err)
+	}
+
+	// Also seed bundled default skills for backward compatibility
 	if err := workspace.SeedDefaultSkills(dataDir); err != nil {
 		fmt.Fprintf(os.Stderr, "warning: failed to seed default skills: %v\n", err)
 	}
-
-	assistantName := promptString("What should your assistant be called? [Aria]", "Aria")
 	fmt.Println()
 	fmt.Println("Tell me a bit about yourself — this will be saved in user context.")
 	fmt.Println("(Finish with an empty line)")
@@ -167,23 +173,23 @@ func runInit(dataDir string) {
 		os.Exit(1)
 	}
 
+	// InstallDefaults already created rich identity.md from SOUL.md template.
+	// Now we add a note about the assistant name at the top if it's a fresh install.
 	identityPath := filepath.Join(dataDir, "identity.md")
-	userPath := filepath.Join(dataDir, "user.md")
-	memoryPath := filepath.Join(dataDir, "memory.md")
-	identity := fmt.Sprintf(
-		"You are %s, a personal AI agent. Be concise, accurate, and practical.\n"+
-			"You can switch your own AI model mid-conversation using the switch_model tool.\n"+
-			"You can connect messaging channels like Slack, Telegram, Discord, or WhatsApp using the connect_channel tool.\n"+
-			"For WhatsApp, no token is needed: connect first, then guide the user to scan the QR shown in openclio webchat.\n"+
-			"For large multi-part requests, you can delegate parallel sub-tasks using the delegate tool.\n"+
-			"When users ask for these actions, do them instead of refusing.",
-		assistantName,
-	)
-	_ = os.WriteFile(identityPath, []byte(identity+"\n"), 0600)
-	_ = os.WriteFile(userPath, []byte(userProfile+"\n"), 0600)
-	if _, err := os.Stat(memoryPath); os.IsNotExist(err) {
-		_ = os.WriteFile(memoryPath, []byte(""), 0600)
+	if content, err := os.ReadFile(identityPath); err == nil {
+		// Add assistant name header if not already present
+		if !strings.Contains(string(content), "# Identity") {
+			header := fmt.Sprintf("# Identity\n\nYou are %s.\n\n", assistantName)
+			_ = os.WriteFile(identityPath, []byte(header+string(content)), 0600)
+		}
 	}
+
+	// user.md is always written fresh with user's profile
+	userPath := filepath.Join(dataDir, "user.md")
+	_ = os.WriteFile(userPath, []byte(userProfile+"\n"), 0600)
+
+	// memory.md template is already installed by InstallDefaults with rich structure
+	// User can fill it in later through conversation or by editing the file
 
 	// ── Success + next steps ──────────────────────────────────────────────────
 	fmt.Println("Config written to " + configPath)
@@ -214,7 +220,26 @@ func runInit(dataDir string) {
 		fmt.Println()
 	}
 
-	fmt.Printf("✓ %s is ready. Try: openclio chat\n", assistantName)
+	// Show what was installed
+	fmt.Println()
+	fmt.Println("✓ Installation complete!")
+	fmt.Println()
+	fmt.Println("Files created in ~/.openclio/:")
+	fmt.Println("  • config.yaml       — Your configuration")
+	fmt.Println("  • identity.md       — Full SOUL.md personality template")
+	fmt.Println("  • user.md           — Your profile")
+	fmt.Println("  • memory.md         — Long-term memory structure")
+	fmt.Println("  • PHILOSOPHY.md     — Project vision & principles")
+	fmt.Println("  • AGENTS_REFERENCE.md— Developer reference")
+	fmt.Println("  • skills/           — Default skill templates")
+	fmt.Println()
+	fmt.Printf("✓ %s is ready with full personality and memory system.\n", assistantName)
+	fmt.Println()
+	fmt.Println("Quick start:")
+	fmt.Println("  openclio chat       — Start chatting")
+	fmt.Println("  openclio serve      — Start web UI + adapters")
+	fmt.Println()
+	fmt.Println("Customize your agent by editing ~/.openclio/identity.md")
 }
 
 // ── Prompt helpers ───────────────────────────────────────────────────────────

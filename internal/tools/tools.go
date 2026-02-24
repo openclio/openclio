@@ -128,6 +128,8 @@ func NewRegistry(cfg config.ToolsConfig, workDir, dataDir string, stores ...Stor
 
 	// Register basic image analyze tool (placeholder implementation).
 	r.Register(NewImageAnalyzeTool())
+	// Register image generation tool (requires OPENAI_API_KEY)
+	r.Register(NewImageGenerateTool())
 
 	// Register memory tool
 	if dataDir != "" {
