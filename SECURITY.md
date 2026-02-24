@@ -145,7 +145,7 @@ Each adapter:
 
 ## Layer 7: Supply Chain Security
 
-| Go (Your Agent) | Node.js (OpenClaw) |
+| Go (OpenClio) | Node.js (OpenClaw) |
 |---|---|
 | ~15 direct dependencies | 400+ npm dependencies |
 | Single static binary | Entire Node.js runtime + node_modules |
@@ -193,7 +193,7 @@ Each adapter:
 
 ---
 
-## Trust Scorecard: Your Agent vs OpenClaw
+## Trust Scorecard: OpenClio vs OpenClaw
 
 | Area | OpenClaw | OpenClio |
 |---|---|---|
