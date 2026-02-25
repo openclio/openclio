@@ -45,3 +45,13 @@ config.yaml
 
 # ── Private planning & internal docs ──────────────────────────────────────────
 private/
+
+# ── User personalization files (never commit your agent's identity) ───────────
+# These files belong in ~/.openclio/ not the repo root
+# If running from git clone, these may be created during development
+/identity.md
+/user.md
+/memory.md
+/SOUL.md
+/PHILOSOPHY.md
+/AGENTS_REFERENCE.md

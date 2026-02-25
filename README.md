@@ -15,15 +15,38 @@
 
 ## Quick Start
 
+### One-line install (Recommended)
 ```bash
-# Install
+# Install and auto-configure via interactive wizard
 curl -sSL https://raw.githubusercontent.com/openclio/openclio/main/install.sh | sh
-
-# First-time setup
-openclio init
 
 # Chat
 openclio
+```
+
+The installer automatically runs `openclio init`, which guides you through:
+- 🎨 Choosing your assistant's name and personality
+- 👤 Setting up your profile and preferences
+- 🤖 Configuring your AI provider (OpenAI, Anthropic, Gemini, or Ollama)
+- 📡 Enabling channels (Telegram, Discord, Web UI)
+
+### Or build from source
+```bash
+git clone https://github.com/openclio/openclio && cd openclio
+make setup    # Build + interactive setup
+./bin/openclio chat
+```
+
+### Edition-aware install source
+
+The installer defaults to Community releases from `openclio/openclio`.
+
+For private Enterprise releases, set a private release repo:
+
+```bash
+OPENCLIO_EDITION=enterprise \
+OPENCLIO_RELEASE_REPO=your-org/openclio-enterprise \
+curl -sSL https://raw.githubusercontent.com/openclio/openclio/main/install.sh | sh
 ```
 
 ## Features
@@ -65,13 +88,46 @@ Override with:
 OPENCLIO_INSTALL_DIR=/custom/bin curl -sSL https://raw.githubusercontent.com/openclio/openclio/main/install.sh | sh
 ```
 
-### From source
+### Manual binary download
+
+Download your platform archive directly from GitHub Releases:
+
+- Community: `https://github.com/openclio/openclio/releases`
+- Enterprise: your private enterprise release repository
+
+Before installation, verify checksums/signatures using `docs/verify-release.md`.
+
+### From source (Git clone)
+
+Perfect for development or customizing your agent:
+
 ```bash
+# 1. Clone the repository
 git clone https://github.com/openclio/openclio
 cd openclio
-make build
-# Binary at bin/openclio
+
+# 2. Build and run interactive setup
+make setup
+
+# 3. Start chatting!
+./bin/openclio chat
 ```
+
+The `make setup` command:
+- Builds the `bin/openclio` binary
+- Runs `openclio init` — an interactive wizard that creates your personalized agent
+- Sets up your config, identity, memory files, and skills in `~/.openclio/`
+
+**What gets created during setup?**
+| File | Purpose |
+|------|---------|
+| `~/.openclio/config.yaml` | Your AI provider, channels, and preferences |
+| `~/.openclio/identity.md` | Your agent's personality, values, and voice |
+| `~/.openclio/user.md` | Your profile and preferences |
+| `~/.openclio/memory.md` | Long-term memory structure for persistent facts |
+| `~/.openclio/skills/` | Ready-to-use skill templates (code review, security audit, etc.) |
+
+All personalization files are stored in `~/.openclio/` (not in the repo), keeping your agent truly yours.
 
 ### Homebrew
 ```bash
@@ -103,6 +159,13 @@ openclio skills list             List available skill files
 openclio migrate openclaw <path> Import OpenClaw history/identity files
 openclio version                 Print version
 ```
+
+## Edition and Release Integrity
+
+- Edition matrix: `docs/editions.md`
+- Enterprise private repo bootstrap: `docs/enterprise-private-repo-bootstrap.md`
+- Artifact verification: `docs/verify-release.md`
+- Open-core rollout guide: `docs/open-core-rollout.md`
 
 ### Interactive chat
 ```bash
@@ -225,20 +288,47 @@ Tools exposed by MCP servers appear alongside built-in tools in the agent's tool
 
 ## Personalization
 
-Create optional files in `~/.openclio/`:
+Your agent is fully customizable. Personalization files live in `~/.openclio/` (created automatically by `openclio init`):
 
 | File | Purpose | Token limit |
 |---|---|---|
-| `identity.md` | Agent persona/name | ~100 tokens |
-| `user.md` | About you (name, preferences) | ~100 tokens |
-| `memory.md` | Persistent facts the agent should remember | ~500 tokens |
-| `skills/*.md` | On-demand skill files (loaded with `/skill <name>`) | Unlimited |
+| `identity.md` | 🎭 Agent's personality, values, voice, and name | ~100 tokens |
+| `user.md` | 👤 Your profile, role, and preferences | ~100 tokens |
+| `memory.md` | 🧠 Persistent facts: projects, stack, goals, people | ~500 tokens |
+| `skills/*.md` | 🛠️ On-demand skill files (loaded with `/skill <name>`) | Unlimited |
 
-Run `openclio init` to create these files interactively.
+### The `openclio init` wizard
 
-On first run, openclio also seeds these built-in skills in `~/.openclio/skills/`:
-`code-review`, `security-audit`, `bug-triage`, `release-checklist`,
-`perf-profiling`, `docs-writer`, `migration-planner`, `incident-response`.
+The setup wizard creates rich starter files with:
+- **5 personality styles** (Professional, Technical, Creative, Minimal, Balanced)
+- **Interactive profile builder** — name, role, tech stack, response preferences
+- **Pre-filled templates** — structured memory sections with examples and prompts
+
+Example `identity.md` excerpt:
+```markdown
+## 🎭 Core Identity
+I am Aria, a local-first personal AI agent running exclusively on your machine.
+
+## 💎 Core Values
+- Privacy is Not a Feature — It Is Foundation
+- Efficiency is Respect
+- Honesty About Uncertainty
+...
+```
+
+### Built-in skills
+
+On first run, openclio seeds these skill templates in `~/.openclio/skills/`:
+- `code-review` — Structured code review checklist
+- `security-audit` — Security-focused code analysis
+- `bug-triage` — Systematic bug investigation
+- `release-checklist` — Pre-release verification
+- `perf-profiling` — Performance analysis workflow
+- `docs-writer` — Documentation generation
+- `migration-planner` — Refactoring/migration planning
+- `incident-response` — Production incident handling
+
+Load a skill anytime with `/skill <name>` in chat.
 
 ## Security
 

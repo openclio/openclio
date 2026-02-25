@@ -5,8 +5,9 @@
 
 set -eu
 
-REPO="openclio/openclio"
+REPO="${OPENCLIO_RELEASE_REPO:-openclio/openclio}"
 BINARY="openclio"
+EDITION="${OPENCLIO_EDITION:-community}"
 
 # Defaults (can be overridden with env vars)
 DEFAULT_INSTALL_DIR="/usr/local/bin"
@@ -53,6 +54,11 @@ while [ "${#}" -gt 0 ]; do
     *) err "Unknown arg: $1"; usage ;;
   esac
 done
+
+if [ "${EDITION}" = "enterprise" ] && [ -z "${OPENCLIO_RELEASE_REPO:-}" ]; then
+  err "Enterprise install requires OPENCLIO_RELEASE_REPO (for example: your-org/openclio-enterprise)."
+  exit 1
+fi
 
 # Platform detection
 OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
@@ -112,11 +118,13 @@ if [ -z "${OPENCLIO_INSTALL_DIR}" ] && [ ! -w "${INSTALL_DIR}" ]; then
   fi
 fi
 
-# ── Fetch latest version ──────────────────────────────────────────────────────
-echo "  Fetching latest release..."
-VERSION=$(curl -sSf "https://api.github.com/repos/${REPO}/releases/latest" \
-  | grep '"tag_name"' \
-  | sed 's/.*"tag_name": "\(.*\)".*/\1/')
+# ── Resolve version ───────────────────────────────────────────────────────────
+if [ -z "${VERSION}" ]; then
+  echo "  Fetching latest release..."
+  VERSION=$(curl -sSf "https://api.github.com/repos/${REPO}/releases/latest" \
+    | grep '"tag_name"' \
+    | sed 's/.*"tag_name": "\(.*\)".*/\1/')
+fi
 
 if [ -z "${VERSION}" ]; then
   echo ""
@@ -126,6 +134,8 @@ if [ -z "${VERSION}" ]; then
 fi
 
 echo "  Version  : ${VERSION}"
+echo "  Edition  : ${EDITION}"
+echo "  Source   : ${REPO}"
 echo "  Platform : ${OS}/${ARCH}"
 echo "  Install  : ${INSTALL_DIR}/${BINARY}"
 echo ""

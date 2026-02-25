@@ -3,10 +3,16 @@
 # One-liner: curl -sSL https://get.openclio.dev/install.sh | sh
 set -e
 
-REPO="openclio/distribution"
+REPO="${OPENCLIO_RELEASE_REPO:-openclio/openclio}"
 BINARY_NAME="openclio"
 INSTALL_DIR="${INSTALL_DIR:-/usr/local/bin}"
 VERSION="${VERSION:-latest}"
+EDITION="${OPENCLIO_EDITION:-community}"
+
+if [ "${EDITION}" = "enterprise" ] && [ -z "${OPENCLIO_RELEASE_REPO:-}" ]; then
+    echo "Enterprise install requires OPENCLIO_RELEASE_REPO (e.g. your-org/openclio-enterprise)."
+    exit 1
+fi
 
 detect_platform() {
     OS=$(uname -s | tr '[:upper:]' '[:lower:]')
@@ -33,7 +39,8 @@ get_latest_version() {
         VERSION=$(curl -sL "https://api.github.com/repos/${REPO}/releases/latest" | \
             grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
     fi
-    echo "Installing openclio $VERSION..."
+    echo "Installing openclio $VERSION (${EDITION} edition)..."
+    echo "Release source: ${REPO}"
 }
 
 download_binary() {

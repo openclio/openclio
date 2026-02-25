@@ -4,7 +4,7 @@ BUILD_TIME := $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
 LDFLAGS   := -ldflags "-X main.version=$(VERSION) -X main.buildTime=$(BUILD_TIME) -s -w"
 INSTALL_DIR := $(HOME)/.local/bin
 
-.PHONY: build run test test-integration lint vet proto clean build-all install checksums release-check help
+.PHONY: build run serve setup test test-integration lint vet proto clean build-all install checksums open-core-check release-check help
 
 ## build: Build for current platform
 build:
@@ -17,6 +17,10 @@ run: build
 ## serve: Build and run in serve mode
 serve: build
 	./bin/$(APP_NAME) serve
+
+## setup: Build and run interactive setup wizard (for first-time users)
+setup: build
+	./bin/$(APP_NAME) init
 
 ## test: Run all unit tests
 test:
@@ -68,6 +72,10 @@ build-all:
 checksums:
 	@cd bin && sha256sum $(APP_NAME)-* > checksums.txt && cat checksums.txt
 
+## open-core-check: Ensure public repo has no private imports
+open-core-check:
+	./scripts/check-open-core-boundaries.sh
+
 ## install: Install binary to $(INSTALL_DIR)
 install: build
 	mkdir -p $(INSTALL_DIR)
@@ -75,7 +83,7 @@ install: build
 	@echo "Installed to $(INSTALL_DIR)/$(APP_NAME)"
 
 ## release-check: Run all pre-release checks
-release-check: vet test test-integration build-all checksums
+release-check: open-core-check vet test test-integration build-all checksums
 	@echo "✓ Pre-release checks passed"
 
 ## help: Show available targets

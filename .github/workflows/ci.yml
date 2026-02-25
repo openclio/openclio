@@ -21,6 +21,9 @@ jobs:
       - name: Install dependencies
         run: go mod download
 
+      - name: Open-core boundary check
+        run: ./scripts/check-open-core-boundaries.sh
+
       - name: Vet
         run: go vet ./...
 

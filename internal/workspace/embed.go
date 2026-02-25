@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 //go:embed templates/*.md
@@ -39,8 +40,13 @@ func InstallDefaults(dataDir string, assistantName string) error {
 	}
 
 	// Install rich memory.md template
-	if err := installTemplate(templatesFS, "templates/memory.md", filepath.Join(dataDir, "memory.md"), ""); err != nil {
+	if err := installTemplate(templatesFS, "templates/memory.md", filepath.Join(dataDir, "memory.md"), assistantName); err != nil {
 		return fmt.Errorf("installing memory: %w", err)
+	}
+
+	// Install user.md template
+	if err := installTemplate(templatesFS, "templates/user.md", filepath.Join(dataDir, "user.md"), assistantName); err != nil {
+		return fmt.Errorf("installing user: %w", err)
 	}
 
 	// Install default skills
@@ -77,9 +83,27 @@ func installTemplate(fs embed.FS, src, dst, assistantName string) error {
 
 func replacePlaceholders(content, assistantName string) string {
 	// Replace default name with user's chosen name
+	content = replaceAll(content, "{{NAME}}", assistantName)
 	content = replaceAll(content, "openclio", assistantName)
 	content = replaceAll(content, "OpenClio", assistantName)
 	return content
+}
+
+// InstallUserProfile installs the user profile with the provided content.
+// This overwrites the template user.md with actual user data.
+func InstallUserProfile(dataDir string, userProfile string) error {
+	userPath := filepath.Join(dataDir, "user.md")
+	
+	// Read the template
+	content, err := templatesFS.ReadFile("templates/user.md")
+	if err != nil {
+		// Fallback: just write the profile directly
+		return os.WriteFile(userPath, []byte(userProfile+"\n"), 0600)
+	}
+	
+	// Replace the placeholder with actual content
+	contentStr := strings.ReplaceAll(string(content), "{{USER_PROFILE}}", userProfile)
+	return os.WriteFile(userPath, []byte(contentStr), 0600)
 }
 
 func replaceAll(s, old, new string) string {
@@ -165,6 +189,7 @@ func HasFullInstall(dataDir string) bool {
 		"PHILOSOPHY.md",
 		"AGENTS_REFERENCE.md",
 		"memory.md",
+		"user.md",
 	}
 
 	for _, file := range required {

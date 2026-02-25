@@ -49,6 +49,8 @@ import (
 	agentctx "github.com/openclio/openclio/internal/context"
 	"github.com/openclio/openclio/internal/cost"
 	agentcron "github.com/openclio/openclio/internal/cron"
+	"github.com/openclio/openclio/internal/edition"
+	"github.com/openclio/openclio/internal/extensions"
 	"github.com/openclio/openclio/internal/gateway"
 	internlog "github.com/openclio/openclio/internal/logger"
 	"github.com/openclio/openclio/internal/mcp"
@@ -206,7 +208,7 @@ func main() {
 	}
 
 	if subcmd == "version" {
-		fmt.Printf("agent %s (built %s)\n", version, buildTime)
+		fmt.Printf("agent %s (%s edition, built %s)\n", version, edition.Name(), buildTime)
 		os.Exit(0)
 	}
 
@@ -392,6 +394,10 @@ func main() {
 		ChannelStatus:    channelStatusReader,
 		Delegation:       delegationStore,
 	})
+	if err := extensions.Register(toolRegistry); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
 	mcpServers, err := registerMCPTools(toolRegistry, cfg.MCPServers, log)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
@@ -463,7 +469,7 @@ func main() {
 		})
 	}
 
-	log.Info("agent ready", "version", version, "provider", cfg.Model.Provider, "model", cfg.Model.Model, "setup_mode", setupMode)
+	log.Info("agent ready", "version", version, "edition", edition.Name(), "provider", cfg.Model.Provider, "model", cfg.Model.Model, "setup_mode", setupMode)
 
 	switch subcmd {
 	case "chat":

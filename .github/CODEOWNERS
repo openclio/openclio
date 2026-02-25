@@ -1,0 +1,15 @@
+# Global ownership
+* @muhammedidris004
+
+# Release and distribution controls
+/.github/workflows/ci.yml @muhammedidris004
+/.github/workflows/release-binaries.yml @muhammedidris004
+/install.sh @muhammedidris004
+/scripts/install.sh @muhammedidris004
+/scripts/check-open-core-boundaries.sh @muhammedidris004
+
+# Open-core boundary and edition controls
+/internal/extensions/ @muhammedidris004
+/internal/edition/ @muhammedidris004
+/docs/editions.md @muhammedidris004
+/docs/enterprise-private-repo-bootstrap.md @muhammedidris004
