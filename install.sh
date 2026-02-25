@@ -108,7 +108,8 @@ echo "────────────────────────�
 echo ""
 
 # ── Resolve install permissions ───────────────────────────────────────────────
-if [ -z "${OPENCLIO_INSTALL_DIR}" ] && [ ! -w "${INSTALL_DIR}" ]; then
+# Use parameter expansion to avoid 'unbound variable' when running with `set -u`.
+if [ -z "${OPENCLIO_INSTALL_DIR:-}" ] && [ ! -w "${INSTALL_DIR}" ]; then
   if command -v sudo >/dev/null 2>&1; then
     USE_SUDO=1
   else
