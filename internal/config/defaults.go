@@ -24,7 +24,7 @@ func DefaultConfig() *Config {
 			Provider:  "auto",
 			Model:     "nomic-embed-text",
 			APIKeyEnv: "OPENAI_API_KEY",
-			BaseURL:   "http://localhost:11434",
+			BaseURL:   "http://127.0.0.1:11434",
 		},
 		Context: ContextConfig{
 			MaxTokensPerCall:     8000,

@@ -973,6 +973,18 @@ type setupPayload struct {
 	Name     string `json:"name,omitempty"`     // display name for openai-compat
 }
 
+// ensureOllamaEmbeddingModelPulled runs "ollama pull <embedding-model>" in the background so semantic search works. Best-effort; does not block or fail.
+func ensureOllamaEmbeddingModelPulled(embeddingModel string) {
+	if embeddingModel == "" {
+		embeddingModel = "nomic-embed-text"
+	}
+	model := strings.TrimSpace(embeddingModel)
+	go func() {
+		cmd := exec.Command("ollama", "pull", model)
+		_ = cmd.Run()
+	}()
+}
+
 // Setup configures the initial provider credentials and hot-reloads the agent.
 // This endpoint is intentionally protected by the standard auth middleware.
 func (h *Handlers) Setup(w http.ResponseWriter, r *http.Request) {
@@ -1019,7 +1031,7 @@ func (h *Handlers) Setup(w http.ResponseWriter, r *http.Request) {
 
 	model := strings.TrimSpace(payload.Model)
 	if model == "" {
-		model = defaultModelForProvider(provider)
+		model = config.DefaultModelForProvider(provider)
 	}
 	if provider == "openai-compat" && model == "" {
 		writeError(w, http.StatusBadRequest, "model is required for openai-compat provider")
@@ -1036,7 +1048,7 @@ func (h *Handlers) Setup(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, "api_key is required for this provider")
 			return
 		}
-		apiKeyEnv = defaultAPIKeyEnvForProvider(provider)
+		apiKeyEnv = config.DefaultAPIKeyEnvForProvider(provider)
 		envPath := filepath.Join(h.dataDir, ".env")
 		if err := config.UpsertDotEnvKey(envPath, apiKeyEnv, apiKey); err != nil {
 			writeError(w, http.StatusInternalServerError, "writing .env failed: "+err.Error())
@@ -1069,6 +1081,9 @@ func (h *Handlers) Setup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Save this provider's model/api to presets so switching back restores it
+	h.cfg.SaveCurrentToPreset()
+
 	configPath := filepath.Join(h.dataDir, "config.yaml")
 	if err := config.Save(configPath, h.cfg); err != nil {
 		h.cfg.Model = previousModelCfg
@@ -1078,6 +1093,11 @@ func (h *Handlers) Setup(w http.ResponseWriter, r *http.Request) {
 
 	h.agent.SetProvider(providerImpl, model)
 	h.setSetupState(false, "")
+
+	// When user selects Ollama, pull the embedding model in the background so semantic search works.
+	if provider == "ollama" && h.cfg.Embeddings.Provider != "openai" {
+		ensureOllamaEmbeddingModelPulled(h.cfg.Embeddings.Model)
+	}
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"ok":             true,
@@ -1162,8 +1182,28 @@ func (h *Handlers) UpdateConfig(w http.ResponseWriter, r *http.Request) {
 				"groq", "deepseek", "mistral", "xai", "cerebras",
 				"together", "fireworks", "perplexity", "openrouter",
 				"kimi", "sambanova", "lambda", "lmstudio", "openai-compat":
-				h.cfg.Model.Provider = payload.Model.Provider
+				newProvider := payload.Model.Provider
+				// Save current provider's model/api to presets before switching
+				h.cfg.SaveCurrentToPreset()
+				// Load the new provider's saved preset (model, api_key_env, base_url, name)
+				preset := h.cfg.GetPreset(newProvider)
+				h.cfg.Model.Provider = newProvider
+				if preset.Model != "" {
+					h.cfg.Model.Model = preset.Model
+				} else {
+					h.cfg.Model.Model = config.DefaultModelForProvider(newProvider)
+				}
+				if preset.APIKeyEnv != "" {
+					h.cfg.Model.APIKeyEnv = preset.APIKeyEnv
+				} else {
+					h.cfg.Model.APIKeyEnv = config.DefaultAPIKeyEnvForProvider(newProvider)
+				}
+				h.cfg.Model.BaseURL = preset.BaseURL
+				h.cfg.Model.Name = preset.Name
 				changed = append(changed, "model.provider")
+				if newProvider == "ollama" && h.cfg.Embeddings.Provider != "openai" {
+					ensureOllamaEmbeddingModelPulled(h.cfg.Embeddings.Model)
+				}
 			default:
 				writeError(w, http.StatusBadRequest, "unknown model.provider: "+payload.Model.Provider)
 				return
@@ -1555,7 +1595,7 @@ func (h *Handlers) setSetupState(required bool, reason string) {
 func buildProviderStackFromConfig(cfg *config.Config) (agent.Provider, error) {
 	primaryCfg := cfg.Model
 	if strings.TrimSpace(primaryCfg.Model) == "" {
-		primaryCfg.Model = defaultModelForProvider(primaryCfg.Provider)
+		primaryCfg.Model = config.DefaultModelForProvider(primaryCfg.Provider)
 	}
 	primary, err := agent.NewProvider(primaryCfg)
 	if err != nil {
@@ -1571,11 +1611,11 @@ func buildProviderStackFromConfig(cfg *config.Config) (agent.Provider, error) {
 		}
 		model := strings.TrimSpace(cfg.Model.FallbackModels[name])
 		if model == "" {
-			model = defaultModelForProvider(name)
+			model = config.DefaultModelForProvider(name)
 		}
 		keyEnv := strings.TrimSpace(cfg.Model.FallbackAPIKeyEnv[name])
 		if keyEnv == "" {
-			keyEnv = defaultAPIKeyEnvForProvider(name)
+			keyEnv = config.DefaultAPIKeyEnvForProvider(name)
 		}
 		fp, err := agent.NewProvider(config.ModelConfig{
 			Provider:  name,
@@ -1591,92 +1631,6 @@ func buildProviderStackFromConfig(cfg *config.Config) (agent.Provider, error) {
 		return agent.NewFailoverProvider(primaryWrapped, fallbacks, nil), nil
 	}
 	return primaryWrapped, nil
-}
-
-func defaultAPIKeyEnvForProvider(provider string) string {
-	switch provider {
-	case "anthropic":
-		return "ANTHROPIC_API_KEY"
-	case "openai":
-		return "OPENAI_API_KEY"
-	case "gemini":
-		return "GEMINI_API_KEY"
-	case "cohere":
-		return "COHERE_API_KEY"
-	case "groq":
-		return "GROQ_API_KEY"
-	case "deepseek":
-		return "DEEPSEEK_API_KEY"
-	case "mistral":
-		return "MISTRAL_API_KEY"
-	case "xai":
-		return "XAI_API_KEY"
-	case "cerebras":
-		return "CEREBRAS_API_KEY"
-	case "together":
-		return "TOGETHER_API_KEY"
-	case "fireworks":
-		return "FIREWORKS_API_KEY"
-	case "perplexity":
-		return "PERPLEXITY_API_KEY"
-	case "openrouter":
-		return "OPENROUTER_API_KEY"
-	case "kimi":
-		return "MOONSHOT_API_KEY"
-	case "sambanova":
-		return "SAMBANOVA_API_KEY"
-	case "lambda":
-		return "LAMBDA_API_KEY"
-	case "openai-compat":
-		return "OPENAI_API_KEY"
-	case "ollama", "lmstudio":
-		return "" // no key required
-	default:
-		return ""
-	}
-}
-
-func defaultModelForProvider(provider string) string {
-	switch provider {
-	case "anthropic":
-		return "claude-sonnet-4-20250514"
-	case "openai":
-		return "gpt-4o-mini"
-	case "gemini":
-		return "gemini-2.0-flash"
-	case "ollama":
-		return "llama3.1"
-	case "cohere":
-		return "command-r-plus-08-2024"
-	case "groq":
-		return "llama-3.3-70b-versatile"
-	case "deepseek":
-		return "deepseek-chat"
-	case "mistral":
-		return "mistral-large-latest"
-	case "xai":
-		return "grok-2-latest"
-	case "cerebras":
-		return "llama3.1-70b"
-	case "together":
-		return "meta-llama/Llama-3.3-70B-Instruct-Turbo"
-	case "fireworks":
-		return "accounts/fireworks/models/llama-v3p3-70b-instruct"
-	case "perplexity":
-		return "sonar-pro"
-	case "openrouter":
-		return "anthropic/claude-sonnet-4-6"
-	case "kimi":
-		return "moonshot-v1-8k"
-	case "sambanova":
-		return "Meta-Llama-3.1-70B-Instruct"
-	case "lambda":
-		return "llama3.1-70b-instruct-fp8"
-	case "lmstudio":
-		return ""
-	default:
-		return ""
-	}
 }
 
 func writeJSON(w http.ResponseWriter, status int, data interface{}) {

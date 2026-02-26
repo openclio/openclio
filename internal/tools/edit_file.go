@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 )
 
@@ -14,11 +13,11 @@ import (
 // no full-file rewrites needed, and an error is returned if the
 // target string is not found (preventing silent overwrites).
 type EditFileTool struct {
-	workDir string
+	allowedRoots []string
 }
 
-func NewEditFileTool(workDir string) *EditFileTool {
-	return &EditFileTool{workDir: workDir}
+func NewEditFileTool(allowedRoots []string) *EditFileTool {
+	return &EditFileTool{allowedRoots: allowedRoots}
 }
 
 func (t *EditFileTool) Name() string { return "edit_file" }
@@ -55,13 +54,8 @@ func (t *EditFileTool) Execute(ctx context.Context, params json.RawMessage) (str
 		return "", fmt.Errorf("old_content must not be empty — use write_file to create files from scratch")
 	}
 
-	absPath, err := filepath.Abs(p.Path)
+	absPath, err := ValidatePathUnderAny(p.Path, t.allowedRoots)
 	if err != nil {
-		return "", fmt.Errorf("resolving path: %w", err)
-	}
-
-	// Validate the target path is within the workspace
-	if _, err := ValidatePath(absPath, t.workDir); err != nil {
 		return "", err
 	}
 

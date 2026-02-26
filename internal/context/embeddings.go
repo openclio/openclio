@@ -118,16 +118,28 @@ type OllamaEmbedder struct {
 	dims    int
 }
 
+// ollamaBaseURL normalizes an Ollama base URL so IPv4 is used (127.0.0.1).
+// Ollama often binds to 127.0.0.1 only; using "localhost" can resolve to IPv6 (::1) and fail with "connection refused".
+func ollamaBaseURL(raw string) string {
+	raw = strings.TrimRight(strings.TrimSpace(raw), "/")
+	if raw == "" {
+		return "http://127.0.0.1:11434"
+	}
+	// Prefer 127.0.0.1 so we connect to the same address Ollama listens on (avoids IPv6 connection refused).
+	if strings.Contains(raw, "//localhost") {
+		raw = strings.Replace(raw, "//localhost", "//127.0.0.1", 1)
+	}
+	return raw
+}
+
 // NewOllamaEmbedder creates an Ollama embedder.
 func NewOllamaEmbedder(baseURL, model string) *OllamaEmbedder {
-	if strings.TrimSpace(baseURL) == "" {
-		baseURL = "http://localhost:11434"
-	}
+	baseURL = ollamaBaseURL(baseURL)
 	if strings.TrimSpace(model) == "" {
 		model = "nomic-embed-text"
 	}
 	return &OllamaEmbedder{
-		baseURL: strings.TrimRight(baseURL, "/"),
+		baseURL: baseURL,
 		model:   model,
 		dims:    768, // nomic-embed-text default dimensions
 	}

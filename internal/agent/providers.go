@@ -42,7 +42,7 @@ func NewProvider(cfg config.ModelConfig) (Provider, error) {
 	case "gemini":
 		return NewGeminiProvider(cfg.APIKeyEnv, cfg.Model)
 	case "ollama":
-		return NewOllamaProvider(cfg.Model), nil
+		return NewOllamaProviderWithBaseURL(cfg.Model, cfg.BaseURL), nil
 	case "cohere":
 		return NewCohereProvider(cfg.APIKeyEnv, cfg.Model)
 

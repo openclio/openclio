@@ -63,7 +63,7 @@ func TestValidatePath(t *testing.T) {
 }
 
 func TestExecTool(t *testing.T) {
-	tool := NewExecTool(defaultExecConfig(), t.TempDir(), 0, false)
+	tool := NewExecTool(defaultExecConfig(), []string{t.TempDir()}, 0, false)
 
 	// Simple command
 	result, err := tool.Execute(context.Background(), json.RawMessage(`{"command":"echo hello"}`))
@@ -83,7 +83,7 @@ func TestExecTool(t *testing.T) {
 
 func TestExecToolWorkDirValidation(t *testing.T) {
 	tmpDir := t.TempDir()
-	tool := NewExecTool(defaultExecConfig(), tmpDir, 0, false)
+	tool := NewExecTool(defaultExecConfig(), []string{tmpDir}, 0, false)
 
 	_, err := tool.Execute(context.Background(), json.RawMessage(`{"command":"pwd","work_dir":"../../"}`))
 	if err == nil {
@@ -96,7 +96,7 @@ func TestReadFileTool(t *testing.T) {
 	testFile := filepath.Join(tmpDir, "test.txt")
 	os.WriteFile(testFile, []byte("file content"), 0644)
 
-	tool := NewReadFileTool(tmpDir, false)
+	tool := NewReadFileTool([]string{tmpDir}, false)
 
 	result, err := tool.Execute(context.Background(), json.RawMessage(`{"path":"`+testFile+`"}`))
 	if err != nil {
@@ -115,7 +115,7 @@ func TestReadFileTool(t *testing.T) {
 
 func TestWriteFileTool(t *testing.T) {
 	tmpDir := t.TempDir()
-	tool := NewWriteFileTool(tmpDir)
+	tool := NewWriteFileTool([]string{tmpDir})
 
 	outFile := filepath.Join(tmpDir, "subdir", "out.txt")
 	params := json.RawMessage(`{"path":"` + outFile + `","content":"written!"}`)
@@ -156,7 +156,7 @@ func TestWriteFileToolRecordsActionLog(t *testing.T) {
 		t.Fatalf("seed file: %v", err)
 	}
 
-	tool := NewWriteFileTool(tmpDir)
+	tool := NewWriteFileTool([]string{tmpDir})
 	tool.SetActionLogStore(store)
 
 	params := json.RawMessage(`{"path":"` + outFile + `","content":"after"}`)
@@ -188,7 +188,7 @@ func TestListDirTool(t *testing.T) {
 	os.WriteFile(filepath.Join(tmpDir, "a.txt"), []byte("a"), 0644)
 	os.Mkdir(filepath.Join(tmpDir, "subdir"), 0755)
 
-	tool := NewListDirTool(tmpDir)
+	tool := NewListDirTool([]string{tmpDir})
 
 	result, err := tool.Execute(context.Background(), json.RawMessage(`{"path":"`+tmpDir+`"}`))
 	if err != nil {
@@ -261,7 +261,7 @@ func TestExecToolRecordsActionLog(t *testing.T) {
 	}
 
 	store := storage.NewActionLogStore(db)
-	tool := NewExecTool(defaultExecConfig(), t.TempDir(), 0, false)
+	tool := NewExecTool(defaultExecConfig(), []string{t.TempDir()}, 0, false)
 	tool.SetActionLogStore(store)
 
 	if _, err := tool.Execute(context.Background(), json.RawMessage(`{"command":"echo tracked"}`)); err != nil {

@@ -10,11 +10,11 @@ import (
 
 // ListDirTool lists directory contents.
 type ListDirTool struct {
-	workDir string
+	allowedRoots []string
 }
 
-func NewListDirTool(workDir string) *ListDirTool {
-	return &ListDirTool{workDir: workDir}
+func NewListDirTool(allowedRoots []string) *ListDirTool {
+	return &ListDirTool{allowedRoots: allowedRoots}
 }
 
 func (t *ListDirTool) Name() string        { return "list_dir" }
@@ -39,7 +39,7 @@ func (t *ListDirTool) Execute(ctx context.Context, params json.RawMessage) (stri
 		return "", fmt.Errorf("invalid params: %w", err)
 	}
 
-	safePath, err := ValidatePath(p.Path, t.workDir)
+	safePath, err := ValidatePathUnderAny(p.Path, t.allowedRoots)
 	if err != nil {
 		return "", err
 	}

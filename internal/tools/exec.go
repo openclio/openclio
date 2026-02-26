@@ -22,7 +22,7 @@ type ExecTool struct {
 	maxOutputSize       int
 	scrubOutput         bool
 	sandbox             string
-	workspaceDir        string
+	allowedRoots        []string // first is primary workspace; when allow_system_access, home is also allowed
 	dockerImage         string
 	networkAccess       bool
 	requireConfirmation bool
@@ -30,7 +30,7 @@ type ExecTool struct {
 	actionLog           *storage.ActionLogStore
 }
 
-func NewExecTool(cfg config.ExecToolConfig, workspaceDir string, maxOutputSize int, scrubOutput bool) *ExecTool {
+func NewExecTool(cfg config.ExecToolConfig, allowedRoots []string, maxOutputSize int, scrubOutput bool) *ExecTool {
 	timeout := cfg.Timeout
 	if timeout == 0 {
 		timeout = 30 * time.Second
@@ -42,20 +42,20 @@ func NewExecTool(cfg config.ExecToolConfig, workspaceDir string, maxOutputSize i
 	if dockerImage == "" {
 		dockerImage = "alpine:latest"
 	}
-	if workspaceDir == "" {
+	if len(allowedRoots) == 0 {
 		if cwd, err := os.Getwd(); err == nil {
-			workspaceDir = cwd
+			allowedRoots = []string{cwd}
 		}
 	}
 	return &ExecTool{
-		timeout:             timeout,
-		maxOutputSize:       maxOutputSize,
-		scrubOutput:         scrubOutput,
-		sandbox:             strings.ToLower(strings.TrimSpace(cfg.Sandbox)),
-		workspaceDir:        workspaceDir,
-		dockerImage:         dockerImage,
-		networkAccess:       cfg.NetworkAccess,
-		requireConfirmation: cfg.RequireConfirmation,
+		timeout:              timeout,
+		maxOutputSize:        maxOutputSize,
+		scrubOutput:          scrubOutput,
+		sandbox:              strings.ToLower(strings.TrimSpace(cfg.Sandbox)),
+		allowedRoots:         allowedRoots,
+		dockerImage:          dockerImage,
+		networkAccess:        cfg.NetworkAccess,
+		requireConfirmation:  cfg.RequireConfirmation,
 	}
 }
 
@@ -161,7 +161,10 @@ func (t *ExecTool) Execute(ctx context.Context, params json.RawMessage) (string,
 }
 
 func (t *ExecTool) resolveWorkDir(requested string) (string, error) {
-	base := t.workspaceDir
+	base := ""
+	if len(t.allowedRoots) > 0 {
+		base = t.allowedRoots[0]
+	}
 	if base == "" {
 		cwd, err := os.Getwd()
 		if err != nil {
@@ -177,7 +180,7 @@ func (t *ExecTool) resolveWorkDir(requested string) (string, error) {
 			path = filepath.Join(base, path)
 		}
 	}
-	return ValidatePath(path, base)
+	return ValidatePathUnderAny(path, t.allowedRoots)
 }
 
 func (t *ExecTool) executeInDocker(ctx context.Context, command, workDir string) (string, error) {

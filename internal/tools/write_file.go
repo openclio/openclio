@@ -10,14 +10,14 @@ import (
 	"github.com/openclio/openclio/internal/storage"
 )
 
-// WriteFileTool creates or overwrites files.
+// WriteFileTool creates or overwrites files. allowedRoots: paths under these dirs are allowed.
 type WriteFileTool struct {
-	workDir   string
-	actionLog *storage.ActionLogStore
+	allowedRoots []string
+	actionLog    *storage.ActionLogStore
 }
 
-func NewWriteFileTool(workDir string) *WriteFileTool {
-	return &WriteFileTool{workDir: workDir}
+func NewWriteFileTool(allowedRoots []string) *WriteFileTool {
+	return &WriteFileTool{allowedRoots: allowedRoots}
 }
 
 // SetActionLogStore attaches optional action log persistence.
@@ -49,16 +49,9 @@ func (t *WriteFileTool) Execute(ctx context.Context, params json.RawMessage) (st
 		return "", fmt.Errorf("invalid params: %w", err)
 	}
 
-	// Resolve to absolute path
-	absPath, err := filepath.Abs(p.Path)
+	// Validate path (may be under any allowed root when allow_system_access is on)
+	absPath, err := ValidatePathUnderAny(p.Path, t.allowedRoots)
 	if err != nil {
-		return "", fmt.Errorf("resolving path: %w", err)
-	}
-
-	// Validate the FULL target path is within workspace.
-	// ValidatePath handles non-existent files by checking the nearest existing parent.
-	// This blocks path traversal (../../) and symlink escapes outside the workspace.
-	if _, err := ValidatePath(absPath, t.workDir); err != nil {
 		return "", err
 	}
 

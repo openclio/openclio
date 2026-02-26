@@ -119,7 +119,7 @@ func TestMessageSendTool_WhatsAppDirectSend(t *testing.T) {
 	adapter := &directWhatsAppAdapter{
 		sendFn: func(ctx context.Context, chatID, text string) error {
 			called = true
-			if chatID != "919500080653@s.whatsapp.net" {
+			if chatID != "15551234567@s.whatsapp.net" {
 				t.Fatalf("unexpected chat id: %s", chatID)
 			}
 			if text != "hello wa" {
@@ -133,7 +133,7 @@ func TestMessageSendTool_WhatsAppDirectSend(t *testing.T) {
 	tool := NewMessageSendTool(mgr)
 	raw, _ := json.Marshal(map[string]any{
 		"channel_type": "whatsapp",
-		"chat_id":      "919500080653@s.whatsapp.net",
+		"chat_id":      "15551234567@s.whatsapp.net",
 		"text":         "hello wa",
 	})
 	out, err := tool.Execute(context.Background(), raw)
@@ -185,7 +185,7 @@ func TestMessageSendTool_WhatsAppAutoConnectAndSend(t *testing.T) {
 			mgr.Register(&directWhatsAppAdapter{
 				sendFn: func(ctx context.Context, chatID, text string) error {
 					called = true
-					if chatID != "919500080653@s.whatsapp.net" {
+					if chatID != "15551234567@s.whatsapp.net" {
 						t.Fatalf("unexpected chat id: %s", chatID)
 					}
 					if text != "hello auto" {
@@ -201,7 +201,7 @@ func TestMessageSendTool_WhatsAppAutoConnectAndSend(t *testing.T) {
 
 	raw, _ := json.Marshal(map[string]any{
 		"channel_type": "whatsapp",
-		"chat_id":      "919500080653@s.whatsapp.net",
+		"chat_id":      "15551234567@s.whatsapp.net",
 		"text":         "hello auto",
 	})
 	out, err := tool.Execute(context.Background(), raw)
@@ -227,7 +227,7 @@ func TestMessageSendTool_WhatsAppAutoConnectFailure(t *testing.T) {
 
 	raw, _ := json.Marshal(map[string]any{
 		"channel_type": "whatsapp",
-		"chat_id":      "919500080653@s.whatsapp.net",
+		"chat_id":      "15551234567@s.whatsapp.net",
 		"text":         "hello auto",
 	})
 	_, err := tool.Execute(context.Background(), raw)
@@ -261,7 +261,7 @@ func TestMessageSendTool_WhatsAppAutoConnectRetriesUntilConnected(t *testing.T) 
 
 	raw, _ := json.Marshal(map[string]any{
 		"channel_type": "whatsapp",
-		"chat_id":      "919500080653@s.whatsapp.net",
+		"chat_id":      "15551234567@s.whatsapp.net",
 		"text":         "hello retry",
 	})
 	out, err := tool.Execute(context.Background(), raw)

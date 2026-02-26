@@ -153,27 +153,27 @@ func TestNormalizeWhatsAppChatID(t *testing.T) {
 	}{
 		{
 			name:  "full jid",
-			input: "919500080653@s.whatsapp.net",
-			want:  "919500080653@s.whatsapp.net",
+			input: "15551234567@s.whatsapp.net",
+			want:  "15551234567@s.whatsapp.net",
 		},
 		{
 			name:  "legacy c us",
-			input: "919500080653@c.us",
-			want:  "919500080653@s.whatsapp.net",
+			input: "15551234567@c.us",
+			want:  "15551234567@s.whatsapp.net",
 		},
 		{
 			name:  "e164 with plus",
-			input: "+91 95000 80653",
-			want:  "919500080653@s.whatsapp.net",
+			input: "+1 555 123 4567",
+			want:  "15551234567@s.whatsapp.net",
 		},
 		{
 			name:  "e164 with 00 prefix",
-			input: "00919500080653",
-			want:  "919500080653@s.whatsapp.net",
+			input: "0015551234567",
+			want:  "15551234567@s.whatsapp.net",
 		},
 		{
 			name:    "missing country code",
-			input:   "9500080653",
+			input:   "5551234567",
 			wantErr: "missing country code",
 		},
 		{

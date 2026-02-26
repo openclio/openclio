@@ -17,9 +17,11 @@ import (
 
 // Workspace holds loaded personalization content.
 type Workspace struct {
-	Identity string // from identity.md (~50 tokens max)
-	UserCtx  string // from user.md (~50 tokens max)
-	Memory   string // from memory.md (~500 tokens max)
+	Identity      string // from identity.md (~50 tokens max)
+	UserCtx       string // from user.md (~50 tokens max)
+	Memory        string // from memory.md (~500 tokens max)
+	AssistantName string // from assistant.yaml (UI and prompt)
+	AssistantIcon string // from assistant.yaml (UI only)
 
 	mu         sync.RWMutex
 	checksums  map[string]string // filename → sha256
@@ -61,10 +63,13 @@ func (w *Workspace) reloadUnlocked() error {
 	identity, _ := w.readIdentity()
 	userCtx, _ := w.readFile("user.md", maxUserTokens)
 	memory, _ := w.readFile("memory.md", maxMemoryTokens)
+	display, _ := LoadAssistantDisplay(w.dataDir)
 
 	w.Identity = identity
 	w.UserCtx = userCtx
 	w.Memory = memory
+	w.AssistantName = display.Name
+	w.AssistantIcon = display.Icon
 	w.lastLoaded = time.Now()
 	return nil
 }
@@ -122,8 +127,11 @@ func (w *Workspace) RefreshIfChanged() {
 
 	dataDir := w.dataDir
 	needsReload := false
-
-	for _, name := range []string{"identity.md", "IDENTITY.md", "SOUL.md", "user.md", "memory.md"} {
+	files := []string{"identity.md", "IDENTITY.md", "SOUL.md", "user.md", "memory.md"}
+	if dataDir != "" {
+		files = append(files, assistantFileName)
+	}
+	for _, name := range files {
 		path := filepath.Join(dataDir, name)
 		data, err := os.ReadFile(path)
 		if err != nil {

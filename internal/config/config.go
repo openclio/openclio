@@ -12,11 +12,20 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// ProviderPreset stores saved model and API settings per provider so switching providers restores each one.
+type ProviderPreset struct {
+	Model     string `yaml:"model,omitempty"`
+	APIKeyEnv string `yaml:"api_key_env,omitempty"`
+	BaseURL   string `yaml:"base_url,omitempty"`
+	Name      string `yaml:"name,omitempty"`
+}
+
 // Config is the top-level configuration for the agent.
 type Config struct {
-	Gateway     GatewayConfig     `yaml:"gateway"`
-	Model       ModelConfig       `yaml:"model"`
-	ModelRouter ModelRouterConfig `yaml:"model_router"`
+	Gateway         GatewayConfig         `yaml:"gateway"`
+	Model           ModelConfig           `yaml:"model"`
+	ProviderPresets map[string]ProviderPreset `yaml:"provider_presets,omitempty"` // per-provider saved model/api; key = provider name
+	ModelRouter     ModelRouterConfig     `yaml:"model_router"`
 	Embeddings  EmbeddingsConfig  `yaml:"embeddings"`
 	Context     ContextConfig     `yaml:"context"`
 	MCPServers  []MCPServerConfig `yaml:"mcp_servers,omitempty"`
@@ -71,11 +80,12 @@ type AgentDelegationConfig struct {
 
 // ToolsConfig configures the tool system.
 type ToolsConfig struct {
-	MaxOutputSize int               `yaml:"max_output_size"`
-	ScrubOutput   bool              `yaml:"scrub_output"` // redact passwords/secrets from tool results (default: true)
-	Exec          ExecToolConfig    `yaml:"exec"`
-	Browser       BrowserToolConfig `yaml:"browser"`
-	WebSearch     *WebSearchConfig  `yaml:"web_search,omitempty"`
+	MaxOutputSize      int               `yaml:"max_output_size"`
+	ScrubOutput        bool              `yaml:"scrub_output"`        // redact passwords/secrets from tool results (default: true)
+	AllowSystemAccess  bool              `yaml:"allow_system_access"` // when true, file/exec can access user home (user must enable explicitly)
+	Exec               ExecToolConfig    `yaml:"exec"`
+	Browser            BrowserToolConfig `yaml:"browser"`
+	WebSearch          *WebSearchConfig  `yaml:"web_search,omitempty"`
 }
 
 // CLIConfig configures the interactive terminal.
@@ -114,6 +124,30 @@ func (m *ModelConfig) APIKey() string {
 		return ""
 	}
 	return os.Getenv(m.APIKeyEnv)
+}
+
+// SaveCurrentToPreset writes the current Model (provider, model, api_key_env, base_url, name) into ProviderPresets[provider] so it can be restored when switching back.
+func (c *Config) SaveCurrentToPreset() {
+	if c == nil || strings.TrimSpace(c.Model.Provider) == "" {
+		return
+	}
+	if c.ProviderPresets == nil {
+		c.ProviderPresets = make(map[string]ProviderPreset)
+	}
+	c.ProviderPresets[c.Model.Provider] = ProviderPreset{
+		Model:     strings.TrimSpace(c.Model.Model),
+		APIKeyEnv: strings.TrimSpace(c.Model.APIKeyEnv),
+		BaseURL:   strings.TrimSpace(c.Model.BaseURL),
+		Name:      strings.TrimSpace(c.Model.Name),
+	}
+}
+
+// GetPreset returns the saved preset for a provider, or a zero value if none.
+func (c *Config) GetPreset(provider string) ProviderPreset {
+	if c == nil || c.ProviderPresets == nil {
+		return ProviderPreset{}
+	}
+	return c.ProviderPresets[provider]
 }
 
 // ContextConfig configures the context engine.
@@ -411,4 +445,92 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("model_router.strategy must be one of: cost_optimized, quality_first, speed_first, privacy_first")
 	}
 	return nil
+}
+
+// DefaultModelForProvider returns the default model ID for a given provider.
+func DefaultModelForProvider(provider string) string {
+	switch provider {
+	case "anthropic":
+		return "claude-sonnet-4-20250514"
+	case "openai":
+		return "gpt-4o-mini"
+	case "gemini":
+		return "gemini-2.0-flash"
+	case "ollama":
+		return "llama3.1"
+	case "cohere":
+		return "command-r-plus-08-2024"
+	case "groq":
+		return "llama-3.3-70b-versatile"
+	case "deepseek":
+		return "deepseek-chat"
+	case "mistral":
+		return "mistral-large-latest"
+	case "xai":
+		return "grok-2-latest"
+	case "cerebras":
+		return "llama3.1-70b"
+	case "together":
+		return "meta-llama/Llama-3.3-70B-Instruct-Turbo"
+	case "fireworks":
+		return "accounts/fireworks/models/llama-v3p3-70b-instruct"
+	case "perplexity":
+		return "sonar-pro"
+	case "openrouter":
+		return "anthropic/claude-sonnet-4-6"
+	case "kimi":
+		return "moonshot-v1-8k"
+	case "sambanova":
+		return "Meta-Llama-3.1-70B-Instruct"
+	case "lambda":
+		return "llama3.1-70b-instruct-fp8"
+	case "lmstudio":
+		return ""
+	default:
+		return ""
+	}
+}
+
+// DefaultAPIKeyEnvForProvider returns the default env var name for a provider's API key.
+func DefaultAPIKeyEnvForProvider(provider string) string {
+	switch provider {
+	case "anthropic":
+		return "ANTHROPIC_API_KEY"
+	case "openai":
+		return "OPENAI_API_KEY"
+	case "gemini":
+		return "GEMINI_API_KEY"
+	case "cohere":
+		return "COHERE_API_KEY"
+	case "groq":
+		return "GROQ_API_KEY"
+	case "deepseek":
+		return "DEEPSEEK_API_KEY"
+	case "mistral":
+		return "MISTRAL_API_KEY"
+	case "xai":
+		return "XAI_API_KEY"
+	case "cerebras":
+		return "CEREBRAS_API_KEY"
+	case "together":
+		return "TOGETHER_API_KEY"
+	case "fireworks":
+		return "FIREWORKS_API_KEY"
+	case "perplexity":
+		return "PERPLEXITY_API_KEY"
+	case "openrouter":
+		return "OPENROUTER_API_KEY"
+	case "kimi":
+		return "KIMI_API_KEY"
+	case "sambanova":
+		return "SAMBANOVA_API_KEY"
+	case "lambda":
+		return "LAMBDA_API_KEY"
+	case "openai-compat":
+		return "OPENAI_API_KEY"
+	case "ollama", "lmstudio":
+		return ""
+	default:
+		return ""
+	}
 }

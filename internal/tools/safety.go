@@ -76,6 +76,30 @@ func ValidatePath(path, allowedRoot string) (string, error) {
 	return absPath, nil
 }
 
+// ValidatePathUnderAny checks that path is under at least one of the allowed roots.
+// Returns the resolved absolute path and nil if valid; used when allow_system_access
+// adds the user's home as an allowed root (user must enable in config).
+func ValidatePathUnderAny(path string, allowedRoots []string) (string, error) {
+	if len(allowedRoots) == 0 {
+		return "", fmt.Errorf("no allowed roots configured")
+	}
+	var lastErr error
+	for _, root := range allowedRoots {
+		if root == "" {
+			continue
+		}
+		safe, err := ValidatePath(path, root)
+		if err == nil {
+			return safe, nil
+		}
+		lastErr = err
+	}
+	if lastErr != nil {
+		return "", lastErr
+	}
+	return "", fmt.Errorf("path %s is not under any allowed directory", path)
+}
+
 var dangerousPatterns = []string{
 	":(){ :|:& };:", // fork bomb
 }

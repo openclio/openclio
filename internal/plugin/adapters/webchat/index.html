@@ -2030,7 +2030,7 @@
 <div id="app">
   <header id="topbar">
     <button id="sidebar-toggle" title="Toggle sessions">☰</button>
-    <span class="logo">openclio</span>
+    <span class="logo" id="app-logo">openclio</span>
     <div id="mode-tabs" aria-label="Mode switch">
       <button id="mode-chat-btn" class="mode-tab active" type="button">Chat</button>
       <button id="mode-dashboard-btn" class="mode-tab" type="button">Control</button>
@@ -2204,6 +2204,8 @@
   let sessionTokens = 0;
   let sessionCost = 0;
   let currentConfig = null;
+  let assistantName = "Clio";
+  let assistantIcon = "🤖";
   let allSessionMessages = [];
   let historyStartIndex = 0;
   let setupRequired = false;
@@ -2267,6 +2269,7 @@
   const tokenCounter = document.getElementById("token-counter");
   const sessionListEl = document.getElementById("session-list");
   const modelBadgeEl = document.getElementById("model-badge");
+  const appLogoEl = document.getElementById("app-logo");
   const modeChatBtn = document.getElementById("mode-chat-btn");
   const modeDashboardBtn = document.getElementById("mode-dashboard-btn");
 
@@ -3130,7 +3133,7 @@
 
     const avatar = document.createElement("div");
     avatar.className = "msg-avatar";
-    avatar.textContent = role === "user" ? "U" : role === "assistant" ? "AI" : "SYS";
+    avatar.textContent = role === "user" ? "U" : role === "assistant" ? (assistantIcon || "AI") : "SYS";
 
     const bubble = document.createElement("div");
     bubble.className = "msg-bubble";
@@ -3603,6 +3606,14 @@
   async function loadConfig() {
     try {
       currentConfig = await apiFetch("/api/v1/config");
+      try {
+        const a = await apiFetch("/api/v1/assistant");
+        if (a && (a.name != null || a.icon != null)) {
+          if (a.name != null) assistantName = String(a.name).trim() || "Clio";
+          if (a.icon != null) assistantIcon = String(a.icon).trim() || "🤖";
+          updateLogoEl();
+        }
+      } catch (_) {}
       const route = parseRouteFromHash();
       if (route.view === "dashboard") {
         switchTab(route.tab || activeNavName());
@@ -4304,7 +4315,19 @@
 
   function renderAppearanceTab() {
     settingsPanel.innerHTML = `
-      <div class="setting-section-title">Appearance</div>
+      <div class="setting-section-title">Assistant identity</div>
+      <div class="setting-row">
+        <div class="setting-label">Assistant name</div>
+        <input class="setting-input" id="appearance-assistant-name" value="${escapeHTML(assistantName)}" placeholder="Clio">
+      </div>
+      <div class="setting-row">
+        <div class="setting-label">Icon or emoji</div>
+        <input class="setting-input" id="appearance-assistant-icon" value="${escapeHTML(assistantIcon)}" placeholder="🤖">
+      </div>
+      <div class="hint-text">Name and icon appear in the header and in chat. Identity is saved to ~/.openclio/ and used in prompts.</div>
+      <button class="setting-save-btn" id="appearance-assistant-save-btn" style="width:100%;margin-top:8px">Save assistant name &amp; icon</button>
+
+      <div class="setting-section-title" style="margin-top:16px">Appearance</div>
       <div class="setting-row">
         <div class="setting-label">Theme</div>
         <select class="setting-select" id="appearance-theme">
@@ -4325,7 +4348,7 @@
         <input class="setting-range" id="appearance-sidebar-width" type="range" min="200" max="360" step="4">
       </div>
       <button class="setting-save-btn" id="appearance-save-btn" style="width:100%;margin-top:8px">Save Appearance</button>
-      <div class="hint-text">Preferences are stored locally in this browser only.</div>
+      <div class="hint-text">Theme and layout are stored locally in this browser only.</div>
     `;
 
     const themeEl = document.getElementById("appearance-theme");
@@ -4376,6 +4399,28 @@
       applyFromControls(true);
       showToast("Appearance saved", false);
     });
+
+    const assistantSaveBtn = document.getElementById("appearance-assistant-save-btn");
+    if (assistantSaveBtn) {
+      assistantSaveBtn.addEventListener("click", async () => {
+        const nameEl = document.getElementById("appearance-assistant-name");
+        const iconEl = document.getElementById("appearance-assistant-icon");
+        const name = (nameEl ? nameEl.value : "").trim() || "Clio";
+        const icon = (iconEl ? iconEl.value : "").trim() || "🤖";
+        try {
+          const res = await apiFetch("/api/v1/assistant", {
+            method: "PUT",
+            body: JSON.stringify({ name, icon }),
+          });
+          assistantName = (res && res.name != null) ? String(res.name).trim() || "Clio" : name;
+          assistantIcon = (res && res.icon != null) ? String(res.icon).trim() || "🤖" : icon;
+          updateLogoEl();
+          showToast("Assistant name and icon updated", false);
+        } catch (err) {
+          showToast(err && err.message ? err.message : "Save failed", true);
+        }
+      });
+    }
   }
 
   function renderShortcutsTab() {
@@ -4450,6 +4495,9 @@
     settingsPanel.innerHTML = `<div class="hint-text">Loading overview...</div>`;
     try {
       const d = await apiFetch("/api/v1/overview");
+      if (d.assistant_name != null) assistantName = String(d.assistant_name).trim() || "Clio";
+      if (d.assistant_icon != null) assistantIcon = String(d.assistant_icon).trim() || "🤖";
+      updateLogoEl();
       const usage = d.usage || {};
       const counts = d.counts || {};
       const model = d.model || {};
@@ -6016,6 +6064,13 @@
       return;
     }
     modelBadgeEl.textContent = `${provider} • ${name}`;
+  }
+
+  function updateLogoEl() {
+    if (!appLogoEl) return;
+    const icon = (assistantIcon && String(assistantIcon).trim()) || "🤖";
+    const name = (assistantName && String(assistantName).trim()) || "Clio";
+    appLogoEl.textContent = `${icon} ${name}`;
   }
 
   function closeSidebarMobile() {

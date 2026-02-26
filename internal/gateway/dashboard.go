@@ -81,6 +81,19 @@ func (h *Handlers) Overview(w http.ResponseWriter, r *http.Request) {
 		skillsCount = len(skills)
 	}
 
+	assistantName := ""
+	assistantIcon := ""
+	if display, err := workspace.LoadAssistantDisplay(h.dataDir); err == nil {
+		assistantName = display.Name
+		assistantIcon = display.Icon
+	}
+	if assistantName == "" {
+		assistantName = "Clio"
+	}
+	if assistantIcon == "" {
+		assistantIcon = "🤖"
+	}
+
 	provider := ""
 	model := ""
 	name := ""
@@ -146,9 +159,68 @@ func (h *Handlers) Overview(w http.ResponseWriter, r *http.Request) {
 			"cron_jobs":        cronJobsCount,
 			"skills":           skillsCount,
 		},
-		"privacy":    privacySummary,
-		"embeddings": embeddingSummary,
+		"assistant_name": assistantName,
+		"assistant_icon": assistantIcon,
+		"privacy":        privacySummary,
+		"embeddings":     embeddingSummary,
 	})
+}
+
+// Assistant handles GET/PUT /api/v1/assistant for display name and icon.
+func (h *Handlers) Assistant(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		display, err := workspace.LoadAssistantDisplay(h.dataDir)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		if display.Name == "" {
+			display.Name = "Clio"
+		}
+		if display.Icon == "" {
+			display.Icon = "🤖"
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"name": display.Name,
+			"icon": display.Icon,
+		})
+		return
+	case http.MethodPut:
+		var body struct {
+			Name string `json:"name"`
+			Icon string `json:"icon"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid JSON")
+			return
+		}
+		name := strings.TrimSpace(body.Name)
+		icon := strings.TrimSpace(body.Icon)
+		if name == "" {
+			name = "Clio"
+		}
+		if icon == "" {
+			icon = "🤖"
+		}
+		if err := workspace.SaveAssistantDisplay(h.dataDir, name, icon); err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		if err := workspace.UpdateIdentityFileWithName(h.dataDir, name); err != nil {
+			// Log but do not fail the request; identity.md update is best-effort
+			if h.cfg != nil && h.cfg.Logging.Level == "debug" {
+				// avoid adding logger dependency here; overview already succeeded
+			}
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"name": name,
+			"icon": icon,
+		})
+		return
+	default:
+		writeError(w, http.StatusMethodNotAllowed, "use GET or PUT")
+	}
 }
 
 // Channels returns configured and runtime channel adapter status.

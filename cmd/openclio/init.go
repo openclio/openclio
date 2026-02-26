@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -53,6 +54,10 @@ func runInit(dataDir string) {
 	assistantName := promptString("What should your assistant be called?", "Aria")
 	if assistantName == "" {
 		assistantName = "Aria"
+	}
+	assistantIcon := promptString("Pick an emoji or icon for your assistant (e.g. 🤖 ✨ 🎯)", "🤖")
+	if assistantIcon == "" {
+		assistantIcon = "🤖"
 	}
 
 	fmt.Println()
@@ -130,6 +135,10 @@ func runInit(dataDir string) {
 	// Install complete template set with the assistant name
 	if err := workspace.InstallDefaults(dataDir, assistantName); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: failed to install default templates: %v\n", err)
+	}
+	// Persist display name and icon for UI and identity
+	if err := workspace.SaveAssistantDisplay(dataDir, assistantName, assistantIcon); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: failed to save assistant display: %v\n", err)
 	}
 
 	// Install user profile using the template
@@ -304,6 +313,15 @@ func runInit(dataDir string) {
 	if err := os.WriteFile(configPath, []byte(sb.String()), 0600); err != nil {
 		fmt.Fprintf(os.Stderr, "Error writing config: %v\n", err)
 		os.Exit(1)
+	}
+
+	// When user selects Ollama, pull the embedding model so semantic search works
+	if provider == "ollama" {
+		embedModel := "nomic-embed-text"
+		fmt.Printf("Pulling embedding model (%s) for semantic search...\n", embedModel)
+		if cmd := exec.Command("ollama", "pull", embedModel); cmd.Run() != nil {
+			fmt.Printf("Note: run 'ollama pull %s' manually if semantic search fails.\n", embedModel)
+		}
 	}
 
 	// ═══════════════════════════════════════════════════════════════════════════

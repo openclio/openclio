@@ -48,6 +48,7 @@ agent:
 # ── Tools ─────────────────────────────────────────────────────────────────────
 tools:
   max_output_size: 102400        # 100 KB — truncates shell command output
+  allow_system_access: false    # set true to let the bot read/write/exec under your home dir (you must enable explicitly)
   exec:
     sandbox: none
     timeout: 30s

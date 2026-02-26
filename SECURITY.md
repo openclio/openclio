@@ -193,6 +193,14 @@ Each adapter:
 
 ---
 
+## Channel / Agentic Behavior
+
+- **No repeated connect prompts** — When a channel (e.g. WhatsApp) is disconnected, the agent reports status only. It does not repeatedly ask the user to connect or scan the QR in subsequent turns unless the user explicitly asks to connect or set up that channel. This reduces social-engineering surface and avoids the agent “nagging” the user.
+- **force_reconnect** — Disconnecting and reconnecting a channel (e.g. to show a fresh WhatsApp QR) is treated as an admin-sensitive action. The agent must get explicit user consent before calling `connect_channel` with `force_reconnect=true`.
+- **Tool-triggered connect** — `connect_channel` is only to be used when the user has asked to connect or set up a channel; the agent does not proactively suggest connecting in every conversation.
+
+---
+
 ## Trust Scorecard: OpenClio vs OpenClaw
 
 | Area | OpenClaw | OpenClio |

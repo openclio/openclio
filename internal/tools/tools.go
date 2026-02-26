@@ -8,7 +8,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 
 	"github.com/openclio/openclio/internal/agent"
@@ -88,6 +90,7 @@ type Stores struct {
 }
 
 // NewRegistry creates a registry with all enabled tools.
+// When cfg.AllowSystemAccess is true, file/exec tools can access the user's home directory (user must enable in config).
 func NewRegistry(cfg config.ToolsConfig, workDir, dataDir string, stores ...Stores) *Registry {
 	r := &Registry{
 		tools: make(map[string]Tool),
@@ -97,21 +100,44 @@ func NewRegistry(cfg config.ToolsConfig, workDir, dataDir string, stores ...Stor
 		storeCfg = stores[0]
 	}
 
+	// Build allowed roots for file/exec: workspace first, then optionally user home (whole-system-style access)
+	allowedRoots := []string{workDir}
+	if workDir == "" {
+		if cwd, err := os.Getwd(); err == nil {
+			allowedRoots = []string{cwd}
+		}
+	}
+	if cfg.AllowSystemAccess {
+		if home, err := os.UserHomeDir(); err == nil && home != "" {
+			// Avoid duplicate if home is already a root or under an existing root
+			hasHome := false
+			for _, root := range allowedRoots {
+				if root == home || strings.HasPrefix(home, root+string(filepath.Separator)) {
+					hasHome = true
+					break
+				}
+			}
+			if !hasHome {
+				allowedRoots = append(allowedRoots, home)
+			}
+		}
+	}
+
 	// Register core tools
 	scrub := cfg.ScrubOutput
-	execTool := NewExecTool(cfg.Exec, workDir, cfg.MaxOutputSize, scrub)
+	execTool := NewExecTool(cfg.Exec, allowedRoots, cfg.MaxOutputSize, scrub)
 	execTool.SetPrivacyStore(storeCfg.Privacy)
 	execTool.SetActionLogStore(storeCfg.ActionLog)
 	r.Register(execTool)
 
-	readTool := NewReadFileTool(workDir, scrub)
+	readTool := NewReadFileTool(allowedRoots, scrub)
 	readTool.SetPrivacyStore(storeCfg.Privacy)
 	r.Register(readTool)
-	writeTool := NewWriteFileTool(workDir)
+	writeTool := NewWriteFileTool(allowedRoots)
 	writeTool.SetActionLogStore(storeCfg.ActionLog)
 	r.Register(writeTool)
-	r.Register(NewEditFileTool(workDir))
-	r.Register(NewListDirTool(workDir))
+	r.Register(NewEditFileTool(allowedRoots))
+	r.Register(NewListDirTool(allowedRoots))
 	webFetchTool := NewWebFetchTool()
 	r.Register(webFetchTool)
 	if cfg.Browser.Enabled {
@@ -134,6 +160,7 @@ func NewRegistry(cfg config.ToolsConfig, workDir, dataDir string, stores ...Stor
 	// Register memory tool
 	if dataDir != "" {
 		r.Register(NewMemoryWriteTool(dataDir))
+		r.Register(NewAssistantDisplayTool(dataDir))
 	}
 	if storeCfg.ProviderSwitcher != nil {
 		r.Register(NewSwitchModelTool(storeCfg.ProviderSwitcher))

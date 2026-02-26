@@ -412,7 +412,7 @@ func normalizeWhatsAppChatID(raw string) (types.JID, error) {
 	}
 	// E.164 with country code is required when using phone numbers directly.
 	if len(digits) < 11 {
-		return types.JID{}, fmt.Errorf("whatsapp number %q is missing country code; use E.164 (example: 919500080653) or full JID (example: 919500080653@s.whatsapp.net)", raw)
+		return types.JID{}, fmt.Errorf("whatsapp number %q is missing country code; use E.164 (example: 15551234567) or full JID (example: 15551234567@s.whatsapp.net)", raw)
 	}
 
 	jid, err := types.ParseJID(digits + "@s.whatsapp.net")

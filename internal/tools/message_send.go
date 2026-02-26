@@ -30,7 +30,7 @@ func (t *MessageSendTool) SetChannelConnector(connector ChannelConnector) {
 func (t *MessageSendTool) Name() string { return "message_send" }
 
 func (t *MessageSendTool) Description() string {
-	return "Send a message to a connected channel. Params: {channel_type, chat_id, text, dry_run=false}. For WhatsApp, use E.164 with country code (for example 919500080653) or full JID (for example 919500080653@s.whatsapp.net)."
+	return "Send a message to a connected channel. Params: {channel_type, chat_id, text, dry_run=false}. For WhatsApp, use E.164 with country code (for example 15551234567) or full JID (for example 15551234567@s.whatsapp.net)."
 }
 
 func (t *MessageSendTool) Schema() json.RawMessage {

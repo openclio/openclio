@@ -72,6 +72,7 @@ func NewServer(
 	mux.HandleFunc("/api/v1/memory/edges", handlers.MemoryEdges)
 	mux.HandleFunc("/api/v1/memory/search", handlers.MemorySearch)
 	mux.HandleFunc("/api/v1/overview", handlers.Overview)
+	mux.HandleFunc("/api/v1/assistant", handlers.Assistant)
 	mux.HandleFunc("/api/v1/channels", handlers.Channels)
 	mux.HandleFunc("/api/v1/channels/whatsapp/qr", handlers.ChannelWhatsAppQR)
 	mux.HandleFunc("/api/v1/channels/action", handlers.ChannelAction)

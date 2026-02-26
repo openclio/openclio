@@ -10,15 +10,15 @@ import (
 	"github.com/openclio/openclio/internal/storage"
 )
 
-// ReadFileTool reads file contents.
+// ReadFileTool reads file contents. allowedRoots: paths under these dirs are allowed (e.g. workspace and optionally home when allow_system_access).
 type ReadFileTool struct {
-	workDir     string
-	scrubOutput bool
-	privacy     *storage.PrivacyStore
+	allowedRoots []string
+	scrubOutput  bool
+	privacy      *storage.PrivacyStore
 }
 
-func NewReadFileTool(workDir string, scrubOutput bool) *ReadFileTool {
-	return &ReadFileTool{workDir: workDir, scrubOutput: scrubOutput}
+func NewReadFileTool(allowedRoots []string, scrubOutput bool) *ReadFileTool {
+	return &ReadFileTool{allowedRoots: allowedRoots, scrubOutput: scrubOutput}
 }
 
 // SetPrivacyStore attaches optional privacy redaction persistence.
@@ -48,8 +48,8 @@ func (t *ReadFileTool) Execute(ctx context.Context, params json.RawMessage) (str
 		return "", fmt.Errorf("invalid params: %w", err)
 	}
 
-	// Validate path
-	safePath, err := ValidatePath(p.Path, t.workDir)
+	// Validate path (may be under any allowed root when allow_system_access is on)
+	safePath, err := ValidatePathUnderAny(p.Path, t.allowedRoots)
 	if err != nil {
 		return "", err
 	}

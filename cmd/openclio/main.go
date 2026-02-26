@@ -419,10 +419,12 @@ func main() {
 		cfg.Model.Model,
 		ws,
 		costTracker,
+		cfg.Tools.AllowSystemAccess,
 	)
 	agentInstance.ConfigureContext(cfg.Context)
 	agentInstance.SetGitContext(tools.GetGitContext(workDir))
 	var providerSwitchMu sync.Mutex
+	configPath := filepath.Join(dataDir, "config.yaml")
 	providerSwitcher.SetHandler(func(providerName, modelName string) error {
 		providerSwitchMu.Lock()
 		defer providerSwitchMu.Unlock()
@@ -431,9 +433,6 @@ func main() {
 		modelName = strings.TrimSpace(modelName)
 		if providerName == "" {
 			return fmt.Errorf("provider is required")
-		}
-		if modelName == "" {
-			return fmt.Errorf("model is required")
 		}
 		switch providerName {
 		case "anthropic", "openai", "gemini", "ollama", "groq", "deepseek":
@@ -444,23 +443,42 @@ func main() {
 		prevProvider := cfg.Model.Provider
 		prevModel := cfg.Model.Model
 		prevAPIKeyEnv := cfg.Model.APIKeyEnv
+		prevBaseURL := cfg.Model.BaseURL
+		prevName := cfg.Model.Name
 
+		// Save current provider's model/api to presets before switching
+		cfg.SaveCurrentToPreset()
+		preset := cfg.GetPreset(providerName)
 		cfg.Model.Provider = providerName
-		cfg.Model.Model = modelName
-		cfg.Model.APIKeyEnv = defaultAPIKeyEnvForProvider(providerName)
-		if cfg.Model.APIKeyEnv == "" {
-			cfg.Model.APIKeyEnv = prevAPIKeyEnv
+		if modelName != "" {
+			cfg.Model.Model = modelName
+		} else if preset.Model != "" {
+			cfg.Model.Model = preset.Model
+		} else {
+			cfg.Model.Model = config.DefaultModelForProvider(providerName)
 		}
+		if preset.APIKeyEnv != "" {
+			cfg.Model.APIKeyEnv = preset.APIKeyEnv
+		} else {
+			cfg.Model.APIKeyEnv = config.DefaultAPIKeyEnvForProvider(providerName)
+		}
+		cfg.Model.BaseURL = preset.BaseURL
+		cfg.Model.Name = preset.Name
 
 		switchedProvider, err := buildProviderStack(cfg, log)
 		if err != nil {
 			cfg.Model.Provider = prevProvider
 			cfg.Model.Model = prevModel
 			cfg.Model.APIKeyEnv = prevAPIKeyEnv
+			cfg.Model.BaseURL = prevBaseURL
+			cfg.Model.Name = prevName
 			return err
 		}
-		agentInstance.SetProvider(switchedProvider, modelName)
-		log.Info("runtime model switch complete", "provider", providerName, "model", modelName)
+		agentInstance.SetProvider(switchedProvider, cfg.Model.Model)
+		if err := config.Save(configPath, cfg); err != nil {
+			log.Warn("failed to persist config after provider switch", "error", err)
+		}
+		log.Info("runtime model switch complete", "provider", providerName, "model", cfg.Model.Model)
 		return nil
 	})
 	if cfg.Agent.Delegation.Enabled {
@@ -500,7 +518,7 @@ func main() {
 func buildProviderStack(cfg *config.Config, log *internlog.Logger) (agent.Provider, error) {
 	primaryModel := strings.TrimSpace(cfg.Model.Model)
 	if primaryModel == "" {
-		primaryModel = defaultModelForProvider(cfg.Model.Provider)
+		primaryModel = config.DefaultModelForProvider(cfg.Model.Provider)
 	}
 
 	var router *agent.ModelRouter
@@ -551,10 +569,10 @@ func buildProviderStack(cfg *config.Config, log *internlog.Logger) (agent.Provid
 			fallbackModel = v
 		}
 		if fallbackModel == "" {
-			fallbackModel = defaultModelForProvider(name)
+			fallbackModel = config.DefaultModelForProvider(name)
 		}
 
-		apiKeyEnv := defaultAPIKeyEnvForProvider(name)
+		apiKeyEnv := config.DefaultAPIKeyEnvForProvider(name)
 		if v := strings.TrimSpace(cfg.Model.FallbackAPIKeyEnv[name]); v != "" {
 			apiKeyEnv = v
 		}
@@ -644,64 +662,6 @@ func ollamaAvailable(baseURL string) bool {
 	}
 	_, _ = io.Copy(io.Discard, resp.Body)
 	return true
-}
-
-func defaultAPIKeyEnvForProvider(provider string) string {
-	switch provider {
-	case "anthropic":
-		return "ANTHROPIC_API_KEY"
-	case "openai":
-		return "OPENAI_API_KEY"
-	case "gemini":
-		return "GEMINI_API_KEY"
-	case "cohere":
-		return "COHERE_API_KEY"
-	case "groq":
-		return "GROQ_API_KEY"
-	case "deepseek":
-		return "DEEPSEEK_API_KEY"
-	case "mistral":
-		return "MISTRAL_API_KEY"
-	case "xai":
-		return "XAI_API_KEY"
-	case "cerebras":
-		return "CEREBRAS_API_KEY"
-	case "together":
-		return "TOGETHER_API_KEY"
-	case "fireworks":
-		return "FIREWORKS_API_KEY"
-	case "perplexity":
-		return "PERPLEXITY_API_KEY"
-	case "openrouter":
-		return "OPENROUTER_API_KEY"
-	case "kimi":
-		return "MOONSHOT_API_KEY"
-	case "sambanova":
-		return "SAMBANOVA_API_KEY"
-	case "lambda":
-		return "LAMBDA_API_KEY"
-	case "openai-compat":
-		return "OPENAI_API_KEY"
-	case "ollama", "lmstudio":
-		return ""
-	default:
-		return ""
-	}
-}
-
-func defaultModelForProvider(provider string) string {
-	switch provider {
-	case "anthropic":
-		return "claude-sonnet-4-20250514"
-	case "openai":
-		return "gpt-4o-mini"
-	case "gemini":
-		return "gemini-1.5-flash"
-	case "ollama":
-		return "llama3.1"
-	default:
-		return ""
-	}
 }
 
 // ── Subcommand handlers ──────────────────────────────────────────────────────

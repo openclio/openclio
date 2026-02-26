@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 )
 
 // OllamaProvider calls the Ollama local API.
@@ -16,11 +17,28 @@ type OllamaProvider struct {
 	baseURL string
 }
 
-// NewOllamaProvider creates an Ollama provider.
+// ollamaBaseURL normalizes an Ollama base URL to use 127.0.0.1 so we hit IPv4 (Ollama often binds to 127.0.0.1 only).
+func ollamaBaseURL(raw string) string {
+	raw = strings.TrimRight(strings.TrimSpace(raw), "/")
+	if raw == "" {
+		return "http://127.0.0.1:11434"
+	}
+	if strings.Contains(raw, "//localhost") {
+		raw = strings.Replace(raw, "//localhost", "//127.0.0.1", 1)
+	}
+	return raw
+}
+
+// NewOllamaProvider creates an Ollama provider with default base URL (127.0.0.1:11434).
 func NewOllamaProvider(model string) *OllamaProvider {
+	return NewOllamaProviderWithBaseURL(model, "")
+}
+
+// NewOllamaProviderWithBaseURL creates an Ollama provider with the given base URL (empty = default).
+func NewOllamaProviderWithBaseURL(model, baseURL string) *OllamaProvider {
 	return &OllamaProvider{
 		model:   model,
-		baseURL: "http://localhost:11434",
+		baseURL: ollamaBaseURL(baseURL),
 	}
 }
 

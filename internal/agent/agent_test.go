@@ -84,7 +84,7 @@ func (m *mockToolExecutor) ToolDefinitions() []ToolDef {
 }
 
 func TestBuildSystemPrompt(t *testing.T) {
-	prompt := BuildSystemPrompt("I am Jarvis.", "User is Idris.", "[Git context]\nBranch: main", []string{"exec", "read_file"})
+	prompt := BuildSystemPrompt("I am Jarvis.", "User is Idris.", "[Git context]\nBranch: main", []string{"exec", "read_file"}, "Jarvis", "🤖", false)
 
 	if !strings.Contains(prompt, "Jarvis") {
 		t.Error("prompt should contain identity")
@@ -119,7 +119,7 @@ func TestBuildSystemPrompt(t *testing.T) {
 }
 
 func TestBuildSystemPromptDefaults(t *testing.T) {
-	prompt := BuildSystemPrompt("", "", "", nil)
+	prompt := BuildSystemPrompt("", "", "", nil, "", "", false)
 
 	if !strings.Contains(prompt, "helpful personal AI assistant") {
 		t.Error("default prompt should have default identity")

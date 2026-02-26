@@ -38,11 +38,12 @@ type Agent struct {
 	cfg                config.AgentConfig
 	contextCfg         config.ContextConfig
 	model              string
-	workspace          *workspace.Workspace // optional personalization
-	costTracker        *cost.Tracker        // optional cost recording
-	gitContext         string
-	maxIterations      int
-	dryRun             bool
+	workspace            *workspace.Workspace // optional personalization
+	costTracker          *cost.Tracker        // optional cost recording
+	gitContext           string
+	maxIterations        int
+	dryRun               bool
+	allowSystemAccess    bool // when true, file/exec tools can access user home (user must enable in config)
 	providerMu         sync.RWMutex
 	compactionInFlight sync.Map // sessionID -> struct{}
 }
@@ -92,6 +93,7 @@ func NewAgent(provider Provider, contextEngine *agentctx.Engine, toolExecutor To
 }
 
 // NewAgentWithWorkspace creates an agent with workspace personalization and cost tracking.
+// allowSystemAccess: when true, the agent's file/exec tools may access the user's home directory (user must enable in config).
 func NewAgentWithWorkspace(
 	provider Provider,
 	contextEngine *agentctx.Engine,
@@ -100,21 +102,23 @@ func NewAgentWithWorkspace(
 	model string,
 	ws *workspace.Workspace,
 	tracker *cost.Tracker,
+	allowSystemAccess bool,
 ) *Agent {
 	iters := cfg.MaxToolIterations
 	if iters == 0 {
 		iters = 10
 	}
 	return &Agent{
-		provider:      provider,
-		contextEngine: contextEngine,
-		toolExecutor:  toolExecutor,
-		cfg:           cfg,
-		contextCfg:    config.DefaultConfig().Context,
-		model:         model,
-		workspace:     ws,
-		costTracker:   tracker,
-		maxIterations: iters,
+		provider:           provider,
+		contextEngine:     contextEngine,
+		toolExecutor:      toolExecutor,
+		cfg:                cfg,
+		contextCfg:         config.DefaultConfig().Context,
+		model:              model,
+		workspace:          ws,
+		costTracker:        tracker,
+		maxIterations:      iters,
+		allowSystemAccess:  allowSystemAccess,
 	}
 }
 
@@ -243,12 +247,16 @@ func (a *Agent) Run(ctx context.Context, sessionID, userMessage string,
 	// Build system prompt — inject workspace context if available
 	identity := ""
 	userCtx := ""
+	assistantName := ""
+	assistantIcon := ""
 	if a.workspace != nil {
 		a.workspace.RefreshIfChanged()
 		identity = a.workspace.Identity
 		userCtx = a.workspace.UserCtx
+		assistantName = a.workspace.AssistantName
+		assistantIcon = a.workspace.AssistantIcon
 	}
-	systemPrompt := BuildSystemPrompt(identity, userCtx, a.gitContext, toolNames)
+	systemPrompt := BuildSystemPrompt(identity, userCtx, a.gitContext, toolNames, assistantName, assistantIcon, a.allowSystemAccess)
 
 	// Pre-flight check: token budget
 	if err := a.checkBudget(sessionID, systemPrompt, userMessage); err != nil {
@@ -446,12 +454,16 @@ func (a *Agent) RunStream(
 
 	identity := ""
 	userCtx := ""
+	assistantName := ""
+	assistantIcon := ""
 	if a.workspace != nil {
 		a.workspace.RefreshIfChanged()
 		identity = a.workspace.Identity
 		userCtx = a.workspace.UserCtx
+		assistantName = a.workspace.AssistantName
+		assistantIcon = a.workspace.AssistantIcon
 	}
-	systemPrompt := BuildSystemPrompt(identity, userCtx, a.gitContext, toolNames)
+	systemPrompt := BuildSystemPrompt(identity, userCtx, a.gitContext, toolNames, assistantName, assistantIcon, a.allowSystemAccess)
 
 	if err := a.checkBudget(sessionID, systemPrompt, userMessage); err != nil {
 		response.Text = err.Error()
@@ -633,12 +645,16 @@ func (a *Agent) BuildStreamRequest(
 
 	identity := ""
 	userCtx := ""
+	assistantName := ""
+	assistantIcon := ""
 	if a.workspace != nil {
 		a.workspace.RefreshIfChanged()
 		identity = a.workspace.Identity
 		userCtx = a.workspace.UserCtx
+		assistantName = a.workspace.AssistantName
+		assistantIcon = a.workspace.AssistantIcon
 	}
-	systemPrompt := BuildSystemPrompt(identity, userCtx, a.gitContext, toolNames)
+	systemPrompt := BuildSystemPrompt(identity, userCtx, a.gitContext, toolNames, assistantName, assistantIcon, a.allowSystemAccess)
 
 	assembled, err := a.contextEngine.Assemble(
 		sessionID, userMessage, systemPrompt,
