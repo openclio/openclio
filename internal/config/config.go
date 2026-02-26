@@ -26,19 +26,37 @@ type Config struct {
 	Model           ModelConfig           `yaml:"model"`
 	ProviderPresets map[string]ProviderPreset `yaml:"provider_presets,omitempty"` // per-provider saved model/api; key = provider name
 	ModelRouter     ModelRouterConfig     `yaml:"model_router"`
-	Embeddings  EmbeddingsConfig  `yaml:"embeddings"`
-	Context     ContextConfig     `yaml:"context"`
-	MCPServers  []MCPServerConfig `yaml:"mcp_servers,omitempty"`
-	Channels    ChannelsConfig    `yaml:"channels"`
-	Agent       AgentConfig       `yaml:"agent"`
-	Tools       ToolsConfig       `yaml:"tools"`
-	CLI         CLIConfig         `yaml:"cli"`
-	Logging     LoggingConfig     `yaml:"logging"`
-	Retention   RetentionConfig   `yaml:"retention"`
-	Cron        []CronJob         `yaml:"cron"`
+	Embeddings      EmbeddingsConfig      `yaml:"embeddings"`
+	Context         ContextConfig         `yaml:"context"`
+	MCPServers      []MCPServerConfig     `yaml:"mcp_servers,omitempty"`
+	Channels        ChannelsConfig        `yaml:"channels"`
+	Agent           AgentConfig           `yaml:"agent"`
+	Tools           ToolsConfig           `yaml:"tools"`
+	CLI             CLIConfig             `yaml:"cli"`
+	Logging         LoggingConfig         `yaml:"logging"`
+	Retention       RetentionConfig       `yaml:"retention"`
+	Cron            []CronJob             `yaml:"cron"`
+	Auth            AuthConfig            `yaml:"auth,omitempty"`
 
 	// DataDir is runtime-only (not serialized) and points at ~/.openclio.
 	DataDir string `yaml:"-"`
+}
+
+// AuthConfig holds optional OAuth and other auth settings.
+type AuthConfig struct {
+	OpenAIOAuth OpenAIOAuthConfig `yaml:"openai_oauth,omitempty"`
+}
+
+// OpenAIOAuthConfig configures "Sign in with OpenAI" (OAuth 2.0 PKCE) for subscription access.
+// When enabled and a token is stored, the OpenAI provider uses it instead of an API key.
+// Client ID and endpoints are required; get them from OpenAI when using Codex-style OAuth (e.g. partner integration).
+type OpenAIOAuthConfig struct {
+	Enabled          bool   `yaml:"enabled"`
+	ClientID         string `yaml:"client_id"`
+	ClientSecret     string `yaml:"client_secret,omitempty"` // optional, for confidential clients
+	AuthorizationURL string `yaml:"authorization_url"`
+	TokenURL         string `yaml:"token_url"`
+	Scope            string `yaml:"scope,omitempty"` // default: openid profile
 }
 
 // ModelRouterConfig configures heuristic model routing.

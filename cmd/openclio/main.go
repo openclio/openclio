@@ -17,6 +17,7 @@
 //	openclio cron run <name>    Trigger a cron job immediately
 //	openclio cron history       Show recent cron job runs
 //	openclio status             Show agent status and config
+//	openclio auth login         Sign in with OpenAI (OAuth) in terminal; prints link
 //	openclio auth rotate        Rotate the auth token
 //	openclio wipe               Delete all data (with confirmation)
 //	openclio export             Export all data to JSON
@@ -237,6 +238,12 @@ func main() {
 		os.Exit(1)
 	}
 
+	// auth login: terminal OAuth flow (no DB needed)
+	if subcmd == "auth" && len(args) >= 2 && args[1] == "login" {
+		runAuthLogin(dataDir, cfg)
+		return
+	}
+
 	if verbose {
 		cfg.Logging.Level = "debug"
 	}
@@ -329,11 +336,19 @@ func main() {
 		runSkillsList(dataDir)
 		return
 	case "auth":
-		if len(args) < 2 || args[1] != "rotate" {
-			fmt.Fprintln(os.Stderr, "usage: agent auth rotate")
+		if len(args) < 2 {
+			fmt.Fprintln(os.Stderr, "usage: openclio auth login | openclio auth rotate")
 			os.Exit(1)
 		}
-		runAuthRotate(dataDir)
+		switch args[1] {
+		case "login":
+			runAuthLogin(dataDir, cfg)
+		case "rotate":
+			runAuthRotate(dataDir)
+		default:
+			fmt.Fprintln(os.Stderr, "usage: openclio auth login | openclio auth rotate")
+			os.Exit(1)
+		}
 		return
 	case "migrate":
 		runMigrateCmd(args[1:], dataDir, db)
@@ -359,7 +374,7 @@ func main() {
 		setupMode = true
 		log.Warn("no model provider configured, starting in setup mode", "hint", "run `openclio init` and choose a provider")
 	} else {
-		provider, err = buildProviderStack(cfg, log)
+		provider, err = buildProviderStack(cfg, log, dataDir)
 		if err != nil {
 			if isMissingAPIKeyError(err) {
 				setupMode = true
@@ -465,7 +480,7 @@ func main() {
 		cfg.Model.BaseURL = preset.BaseURL
 		cfg.Model.Name = preset.Name
 
-		switchedProvider, err := buildProviderStack(cfg, log)
+		switchedProvider, err := buildProviderStack(cfg, log, dataDir)
 		if err != nil {
 			cfg.Model.Provider = prevProvider
 			cfg.Model.Model = prevModel
@@ -515,7 +530,7 @@ func main() {
 	}
 }
 
-func buildProviderStack(cfg *config.Config, log *internlog.Logger) (agent.Provider, error) {
+func buildProviderStack(cfg *config.Config, log *internlog.Logger, dataDir string) (agent.Provider, error) {
 	primaryModel := strings.TrimSpace(cfg.Model.Model)
 	if primaryModel == "" {
 		primaryModel = config.DefaultModelForProvider(cfg.Model.Provider)
@@ -551,9 +566,25 @@ func buildProviderStack(cfg *config.Config, log *internlog.Logger) (agent.Provid
 
 	primaryCfg := cfg.Model
 	primaryCfg.Model = primaryModel
-	primaryRaw, err := agent.NewProvider(primaryCfg)
-	if err != nil {
-		return nil, err
+	var primaryRaw agent.Provider
+	if primaryCfg.Provider == "openai" && cfg.Auth.OpenAIOAuth.Enabled &&
+		strings.TrimSpace(cfg.Auth.OpenAIOAuth.ClientID) != "" &&
+		strings.TrimSpace(cfg.Auth.OpenAIOAuth.TokenURL) != "" {
+		oc := cfg.Auth.OpenAIOAuth
+		gatewayOAuth := gateway.OpenAIOAuthConfig{
+			Enabled: oc.Enabled, ClientID: oc.ClientID, ClientSecret: oc.ClientSecret,
+			AuthorizationURL: oc.AuthorizationURL, TokenURL: oc.TokenURL, Scope: oc.Scope,
+		}
+		if accessToken := gateway.GetValidOpenAIOAuthAccessToken(dataDir, &gatewayOAuth, oc.TokenURL); accessToken != "" {
+			primaryRaw = agent.NewOpenAIProviderWithToken(accessToken, primaryModel)
+		}
+	}
+	if primaryRaw == nil {
+		var err error
+		primaryRaw, err = agent.NewProvider(primaryCfg)
+		if err != nil {
+			return nil, err
+		}
 	}
 	primary := wrapProvider(primaryRaw, primaryModel)
 
@@ -1476,21 +1507,11 @@ func runServe(
 		}
 	}
 
-	// WhatsApp adapter (whatsmeow QR login; no API token required)
-	if cfg.Channels.WhatsApp != nil && cfg.Channels.WhatsApp.Enabled {
-		waDataDir := dataDir
-		if cfg.Channels.WhatsApp.DataDir != "" {
-			waDataDir = cfg.Channels.WhatsApp.DataDir
-		}
-		waDataDir = resolveLocalPath(waDataDir)
-		wa, err := whatsappadapter.New(waDataDir, internlog.AsLogger(log))
-		if err != nil {
-			log.Warn("whatsapp adapter failed to initialise", "error", err)
-		} else {
-			manager.Register(wa)
-			log.Info("whatsapp adapter registered")
-		}
-	}
+	// WhatsApp adapter is not started at server boot — it starts only when the user
+	// explicitly connects (dashboard "Connect" or connect_channel tool). This avoids
+	// printing a QR code to the terminal on every server start when there is no session.
+	// When enabled in config, the Channels UI still shows WhatsApp as configured; the
+	// connector creates, registers, and runs the adapter on first Connect.
 
 	// Slack adapter
 	if cfg.Channels.Slack != nil {
@@ -1610,7 +1631,7 @@ func resolveChannelStatus(manager *plugin.Manager, st plugin.AdapterStatus) tool
 
 	adapter := manager.AdapterByName("whatsapp")
 	if adapter == nil {
-		status.Message = "WhatsApp adapter is not registered."
+		status.Message = "WhatsApp is configured but not connected. Use the dashboard Connect button or connect_channel tool to start pairing."
 		return status
 	}
 
@@ -2172,6 +2193,21 @@ func runStatus(cfg *config.Config, dataDir string) {
 }
 
 // runAuthRotate generates a new auth token.
+// runAuthLogin runs the terminal OAuth flow for OpenAI: prints the auth URL and waits for callback.
+func runAuthLogin(dataDir string, cfg *config.Config) {
+	o := cfg.Auth.OpenAIOAuth
+	if !o.Enabled || o.ClientID == "" || o.AuthorizationURL == "" || o.TokenURL == "" {
+		fmt.Fprintln(os.Stderr, "OpenAI OAuth is not configured. Add auth.openai_oauth to ~/.openclio/config.yaml with enabled, client_id, authorization_url, and token_url, then run 'openclio auth login' again.")
+		fmt.Fprintln(os.Stderr, "See docs/openai-setup.md for details.")
+		os.Exit(1)
+	}
+	if err := gateway.RunOpenAIOAuthLogin(dataDir, o.AuthorizationURL, o.TokenURL, o.ClientID, o.ClientSecret, o.Scope, true); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Println("✓ Signed in with OpenAI. You can close the browser and use openclio chat or serve.")
+}
+
 func runAuthRotate(dataDir string) {
 	newToken, err := gateway.RotateToken(dataDir)
 	if err != nil {

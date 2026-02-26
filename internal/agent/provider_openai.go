@@ -18,21 +18,31 @@ type OpenAIProvider struct {
 	baseURL string
 }
 
-// NewOpenAIProvider creates an OpenAI provider.
+// NewOpenAIProvider creates an OpenAI provider using the API key from the given env var.
 func NewOpenAIProvider(apiKeyEnv, model string) (*OpenAIProvider, error) {
 	key := os.Getenv(apiKeyEnv)
 	if key == "" {
 		return nil, fmt.Errorf("environment variable %s is not set", apiKeyEnv)
 	}
+	return newOpenAIProviderWithKey(key, model), nil
+}
+
+// NewOpenAIProviderWithToken creates an OpenAI provider using a bearer token (e.g. from OAuth).
+// Use this when the user has signed in via "Sign in with OpenAI" and the token is stored.
+func NewOpenAIProviderWithToken(accessToken, model string) *OpenAIProvider {
+	return newOpenAIProviderWithKey(accessToken, model)
+}
+
+func newOpenAIProviderWithKey(apiKey, model string) *OpenAIProvider {
 	baseURL := os.Getenv("OPENAI_BASE_URL")
 	if baseURL == "" {
 		baseURL = "https://api.openai.com"
 	}
 	return &OpenAIProvider{
-		apiKey:  key,
+		apiKey:  apiKey,
 		model:   model,
 		baseURL: baseURL,
-	}, nil
+	}
 }
 
 func (p *OpenAIProvider) Name() string { return "openai" }

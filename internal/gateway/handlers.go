@@ -2,6 +2,8 @@ package gateway
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -1074,7 +1076,7 @@ func (h *Handlers) Setup(w http.ResponseWriter, r *http.Request) {
 		h.cfg.Model.Name = name
 	}
 
-	providerImpl, err := buildProviderStackFromConfig(h.cfg)
+	providerImpl, err := buildProviderStackFromConfig(h.cfg, h.dataDir)
 	if err != nil {
 		h.cfg.Model = previousModelCfg
 		writeError(w, http.StatusBadRequest, "provider initialization failed: "+err.Error())
@@ -1105,6 +1107,110 @@ func (h *Handlers) Setup(w http.ResponseWriter, r *http.Request) {
 		"provider":       provider,
 		"model":          model,
 	})
+}
+
+// OpenAIOAuthStart initiates the OpenAI OAuth flow (redirect to provider's authorization page).
+func (h *Handlers) OpenAIOAuthStart(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "use GET")
+		return
+	}
+	oc := h.cfg.Auth.OpenAIOAuth
+	if !oc.Enabled || strings.TrimSpace(oc.ClientID) == "" || strings.TrimSpace(oc.AuthorizationURL) == "" || strings.TrimSpace(oc.TokenURL) == "" {
+		writeError(w, http.StatusBadRequest, "OpenAI OAuth is not configured: set auth.openai_oauth.enabled, client_id, authorization_url, and token_url in config")
+		return
+	}
+	verifier, challenge, err := GeneratePKCE()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to generate PKCE: "+err.Error())
+		return
+	}
+	stateBytes := make([]byte, 16)
+	if _, err := rand.Read(stateBytes); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to generate state: "+err.Error())
+		return
+	}
+	state := hex.EncodeToString(stateBytes)
+	StoreOAuthState(state, verifier)
+
+	scheme := "https"
+	if r.TLS == nil {
+		scheme = "http"
+	}
+	redirectURI := fmt.Sprintf("%s://%s/api/v1/auth/openai/callback", scheme, r.Host)
+	scope := strings.TrimSpace(oc.Scope)
+	if scope == "" {
+		scope = "openid profile"
+	}
+	authURL := BuildOpenAIOAuthStartURL(oc.AuthorizationURL, oc.ClientID, redirectURI, scope, state, challenge)
+	http.Redirect(w, r, authURL, http.StatusFound)
+}
+
+// OpenAIOAuthCallback handles the OAuth callback (authorization code exchange and token storage).
+func (h *Handlers) OpenAIOAuthCallback(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "use GET")
+		return
+	}
+	code := strings.TrimSpace(r.URL.Query().Get("code"))
+	state := strings.TrimSpace(r.URL.Query().Get("state"))
+	if code == "" || state == "" {
+		writeError(w, http.StatusBadRequest, "missing code or state")
+		return
+	}
+	verifier := ConsumeOAuthState(state)
+	if verifier == "" {
+		writeError(w, http.StatusBadRequest, "invalid or expired state")
+		return
+	}
+	oc := h.cfg.Auth.OpenAIOAuth
+	scheme := "https"
+	if r.TLS == nil {
+		scheme = "http"
+	}
+	redirectURI := fmt.Sprintf("%s://%s/api/v1/auth/openai/callback", scheme, r.Host)
+	tok, err := ExchangeOpenAIOAuthCode(r.Context(), oc.TokenURL, oc.ClientID, oc.ClientSecret, redirectURI, code, verifier)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "token exchange failed: "+err.Error())
+		return
+	}
+	if err := WriteOpenAIOAuthToken(h.dataDir, tok); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to store token: "+err.Error())
+		return
+	}
+	// Redirect back to app with success; frontend can show "OpenAI connected" and switch provider.
+	http.Redirect(w, r, "/?openai_oauth=success", http.StatusFound)
+}
+
+// OpenAIOAuthStatus returns whether an OpenAI OAuth token is stored and valid.
+func (h *Handlers) OpenAIOAuthStatus(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "use GET")
+		return
+	}
+	tok, err := ReadOpenAIOAuthToken(h.dataDir)
+	if err != nil || tok == nil {
+		writeJSON(w, http.StatusOK, map[string]interface{}{"signed_in": false, "message": "no token stored"})
+		return
+	}
+	valid := time.Until(tok.ExpiresAt) > 60*time.Second
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"signed_in": valid,
+		"expires_at": tok.ExpiresAt.UTC().Format(time.RFC3339),
+	})
+}
+
+// OpenAIOAuthSignOut clears the stored OpenAI OAuth token.
+func (h *Handlers) OpenAIOAuthSignOut(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "use POST")
+		return
+	}
+	if err := ClearOpenAIOAuthToken(h.dataDir); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to clear token: "+err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "message": "signed out"})
 }
 
 // updateConfigPayload is the shape of a PUT /api/v1/config request body.
@@ -1592,14 +1698,30 @@ func (h *Handlers) setSetupState(required bool, reason string) {
 	h.setupReason = reason
 }
 
-func buildProviderStackFromConfig(cfg *config.Config) (agent.Provider, error) {
+func buildProviderStackFromConfig(cfg *config.Config, dataDir string) (agent.Provider, error) {
 	primaryCfg := cfg.Model
 	if strings.TrimSpace(primaryCfg.Model) == "" {
 		primaryCfg.Model = config.DefaultModelForProvider(primaryCfg.Provider)
 	}
-	primary, err := agent.NewProvider(primaryCfg)
-	if err != nil {
-		return nil, err
+	var primary agent.Provider
+	if primaryCfg.Provider == "openai" && cfg.Auth.OpenAIOAuth.Enabled &&
+		strings.TrimSpace(cfg.Auth.OpenAIOAuth.ClientID) != "" &&
+		strings.TrimSpace(cfg.Auth.OpenAIOAuth.TokenURL) != "" {
+		oc := cfg.Auth.OpenAIOAuth
+		gatewayOAuth := OpenAIOAuthConfig{
+			Enabled: oc.Enabled, ClientID: oc.ClientID, ClientSecret: oc.ClientSecret,
+			AuthorizationURL: oc.AuthorizationURL, TokenURL: oc.TokenURL, Scope: oc.Scope,
+		}
+		if accessToken := GetValidOpenAIOAuthAccessToken(dataDir, &gatewayOAuth, oc.TokenURL); accessToken != "" {
+			primary = agent.NewOpenAIProviderWithToken(accessToken, primaryCfg.Model)
+		}
+	}
+	if primary == nil {
+		var err error
+		primary, err = agent.NewProvider(primaryCfg)
+		if err != nil {
+			return nil, err
+		}
 	}
 	primaryWrapped := agent.WithModel(primary, primaryCfg.Model)
 

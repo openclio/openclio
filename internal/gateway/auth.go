@@ -22,6 +22,11 @@ func AuthMiddleware(token string) func(http.Handler) http.Handler {
 				next.ServeHTTP(w, r)
 				return
 			}
+			// OAuth callback is called by the provider's redirect; no app token in the request
+			if r.URL.Path == "/api/v1/auth/openai/callback" {
+				next.ServeHTTP(w, r)
+				return
+			}
 
 			// Check Authorization header
 			auth := r.Header.Get("Authorization")

@@ -226,6 +226,10 @@ func NewServer(
 		}
 	})
 	// Setup endpoint remains behind AuthMiddleware (unlike /api/v1/health).
+	mux.HandleFunc("/api/v1/auth/openai/start", handlers.OpenAIOAuthStart)
+	mux.HandleFunc("/api/v1/auth/openai/callback", handlers.OpenAIOAuthCallback)
+	mux.HandleFunc("/api/v1/auth/openai/status", handlers.OpenAIOAuthStatus)
+	mux.HandleFunc("/api/v1/auth/openai/signout", handlers.OpenAIOAuthSignOut)
 	mux.HandleFunc("/api/v1/setup", func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodPost:

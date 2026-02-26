@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/openclio/openclio/internal/gateway"
 	"github.com/openclio/openclio/internal/workspace"
 )
 
@@ -230,6 +231,30 @@ func runInit(dataDir string) {
 		}
 	}
 
+	var useOpenAIOAuth bool
+	var oauthClientID, oauthAuthURL, oauthTokenURL, oauthClientSecret, oauthScope string
+	if provider == "openai" {
+		fmt.Println()
+		fmt.Println("Sign in with OpenAI:")
+		fmt.Println("  1) API key (set OPENAI_API_KEY in environment)")
+		fmt.Println("  2) Sign in in browser (OAuth — like Cline/OpenClaw)")
+		openaiAuthChoice := promptChoice("Choose", []string{"1", "2"}, "1")
+		if openaiAuthChoice == "2" {
+			useOpenAIOAuth = true
+			oauthClientID = promptString("OAuth client ID (from OpenAI partner / app)", "")
+			if oauthClientID == "" {
+				fmt.Fprintln(os.Stderr, "OAuth requires a client ID. Run init again and choose 1 for API key, or add auth.openai_oauth to config later and run 'openclio auth login'.")
+				os.Exit(1)
+			}
+			oauthAuthURL = promptString("OAuth authorization URL", "https://auth.openai.com/oauth/authorize")
+			oauthTokenURL = promptString("OAuth token URL", "https://auth.openai.com/oauth/token")
+			oauthClientSecret = promptString("OAuth client secret (optional, leave blank if not used)", "")
+			oauthScope = promptString("OAuth scope", "openid profile")
+			if oauthScope == "" {
+				oauthScope = "openid profile"
+			}
+		}
+	}
 	fmt.Println()
 
 	// ═══════════════════════════════════════════════════════════════════════════
@@ -251,10 +276,27 @@ func runInit(dataDir string) {
 	sb.WriteString("model:\n")
 	sb.WriteString(fmt.Sprintf("  provider:    %s          # AI provider\n", provider))
 	sb.WriteString(fmt.Sprintf("  model:       %s  # Model to use\n", model))
-	if apiKeyEnv != "" {
+	if apiKeyEnv != "" && !useOpenAIOAuth {
 		sb.WriteString(fmt.Sprintf("  api_key_env: %s     # Environment variable for API key\n", apiKeyEnv))
 	}
 	sb.WriteString("\n")
+
+	if useOpenAIOAuth {
+		sb.WriteString("# ── OpenAI OAuth (Sign in with OpenAI) ─────────────────────────────\n")
+		sb.WriteString("auth:\n")
+		sb.WriteString("  openai_oauth:\n")
+		sb.WriteString("    enabled: true\n")
+		sb.WriteString(fmt.Sprintf("    client_id: %q\n", oauthClientID))
+		if oauthClientSecret != "" {
+			sb.WriteString(fmt.Sprintf("    client_secret: %q\n", oauthClientSecret))
+		}
+		sb.WriteString(fmt.Sprintf("    authorization_url: %q\n", oauthAuthURL))
+		sb.WriteString(fmt.Sprintf("    token_url: %q\n", oauthTokenURL))
+		if oauthScope != "" {
+			sb.WriteString(fmt.Sprintf("    scope: %q\n", oauthScope))
+		}
+		sb.WriteString("\n")
+	}
 
 	sb.WriteString("# ── Gateway (HTTP + WebSocket) ─────────────────────────────────────\n")
 	sb.WriteString("gateway:\n")
@@ -313,6 +355,23 @@ func runInit(dataDir string) {
 	if err := os.WriteFile(configPath, []byte(sb.String()), 0600); err != nil {
 		fmt.Fprintf(os.Stderr, "Error writing config: %v\n", err)
 		os.Exit(1)
+	}
+
+	// When user chose OpenAI OAuth, run terminal login: print link and wait for callback
+	if useOpenAIOAuth {
+		fmt.Println()
+		fmt.Println("┌─────────────────────────────────────────────────────────────────┐")
+		fmt.Println("│  Sign in with OpenAI (OAuth)                                    │")
+		fmt.Println("└─────────────────────────────────────────────────────────────────┘")
+		fmt.Println()
+		if err := gateway.RunOpenAIOAuthLogin(dataDir, oauthAuthURL, oauthTokenURL, oauthClientID, oauthClientSecret, oauthScope, true); err != nil {
+			fmt.Fprintf(os.Stderr, "OAuth login failed: %v\n", err)
+			fmt.Fprintln(os.Stderr, "You can run 'openclio auth login' later to sign in again.")
+			// Don't os.Exit — continue to show setup complete
+		} else {
+			fmt.Println("✓ Signed in with OpenAI.")
+			fmt.Println()
+		}
 	}
 
 	// When user selects Ollama, pull the embedding model so semantic search works
@@ -375,8 +434,8 @@ func runInit(dataDir string) {
 	fmt.Println("   • skills/              — Default skill templates")
 	fmt.Println()
 
-	// Show API key instructions if needed
-	if apiKeyEnv != "" {
+	// Show API key instructions if needed (skip when we just did OpenAI OAuth)
+	if apiKeyEnv != "" && !useOpenAIOAuth {
 		fmt.Println("🔑 Next: Set your API key")
 		fmt.Printf("   export %s=<your-api-key>\n", apiKeyEnv)
 		if apiKeyHint != "" {

@@ -231,7 +231,7 @@ cron:
     channel: telegram
 ```
 
-See [docs/configuration.md](docs/configuration.md) for the full reference.
+See [docs/configuration.md](docs/configuration.md) for the full reference. To use your **OpenAI paid account**, see [docs/openai-setup.md](docs/openai-setup.md) (API key setup; OpenAI does not use OAuth for API access).
 
 ## Channel Adapters
 

@@ -21,6 +21,19 @@ embeddings:
   api_key_env: OPENAI_API_KEY
   base_url: http://localhost:11434
 
+# ── Auth (optional OAuth) ────────────────────────────────────────────────────
+# OpenAI OAuth: "Sign in with OpenAI" (Cline/Codex-style). Requires client_id and
+# endpoints from OpenAI (e.g. partner integration). When enabled and a token is
+# stored, the OpenAI provider uses it instead of an API key.
+# auth:
+#   openai_oauth:
+#     enabled: false
+#     client_id: ""              # from OpenAI when using Codex-style OAuth
+#     client_secret: ""          # optional
+#     authorization_url: ""      # e.g. https://auth.openai.com/oauth/authorize
+#     token_url: ""              # e.g. https://auth.openai.com/oauth/token
+#     scope: "openid profile"
+
 # ── Gateway (HTTP + WebSocket server) ─────────────────────────────────────────
 gateway:
   port: 18789
