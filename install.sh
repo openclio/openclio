@@ -9,6 +9,9 @@ REPO="${OPENCLIO_RELEASE_REPO:-openclio/openclio}"
 BINARY="openclio"
 EDITION="${OPENCLIO_EDITION:-community}"
 
+# Normalize install dir so it's never unbound (avoids "unbound variable" with set -u when run as curl | sh)
+OPENCLIO_INSTALL_DIR="${OPENCLIO_INSTALL_DIR:-}"
+
 # Defaults (can be overridden with env vars)
 DEFAULT_INSTALL_DIR="/usr/local/bin"
 INSTALL_DIR="${OPENCLIO_INSTALL_DIR:-${DEFAULT_INSTALL_DIR}}"
