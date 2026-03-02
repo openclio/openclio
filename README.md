@@ -53,20 +53,98 @@ curl -sSL https://raw.githubusercontent.com/openclio/openclio/main/install.sh | 
 
 | Feature | Detail |
 |---|---|
-| **Up to 7.2× fewer tokens** | 3-tier memory engine, prompt caching, token budget allocator |
+| **Up to 7.2× fewer tokens** | 4-tier memory engine, prompt caching, token budget allocator |
 | **Cost & Budgets** | Hard session/daily limits, real-time USD estimations |
 | **Observability** | Log rotation, secret scrubbing, token tracking, `/debug` tools |
 | **Single binary** | One ~24MB stripped binary (`CGO_ENABLED=0`), no Node.js, no pkg managers, no Docker required |
 | **Multi-provider** | Anthropic, OpenAI, Gemini, Ollama (local) + optional failover |
 | **Secure by default** | Loopback-only, JWT auth, path traversal prevention |
 | **Web UI / Chat** | Visit `http://localhost:18789` or connect a channel adapter |
-| **Channel adapters** | Telegram, Discord, WebChat (built-in), WhatsApp (experimental) |
+| **Channel adapters** | Telegram, Discord, WebChat (built-in), Slack, WhatsApp (experimental) |
 | **MCP servers** | Connect any MCP-compatible tool server over stdio |
 | **Cron tasks** | Schedule agent runs in `config.yaml` |
+| **Knowledge Graph** | Auto-extracted entities and relations from conversations |
+| **History & Undo** | Full action log for `write_file`/`exec` with per-action undo |
 
-## Token Efficiency
+## Memory System
 
-The 3-tier context engine measurably reduces tokens sent per LLM call compared to naively including the full conversation history:
+openclio uses a **4-tier memory engine** that assembles the most relevant context for every LLM call, hard-capped to a token budget. Nothing is naively dumped in full — each tier is budget-allocated, priority-ordered, and trimmed to fit.
+
+### How it works
+
+When you send a message, the context engine runs these steps in order before calling the LLM:
+
+```
+User message
+    ↓
+Budget allocator partitions the token budget across all components
+    ↓
+Tier 1 — Working Memory    load last N recent turns
+Tier 2 — Episodic Memory   embed user message → cosine search → inject relevant past messages
+Tier 3 — Semantic Memory   load persistent facts from memory.md
+Tier 4 — Knowledge Graph   query entities/relations relevant to the current message
+    ↓
+Assembled context → LLM
+```
+
+### Token budget allocation
+
+For a default 8,000-token budget, the allocator distributes tokens in priority order:
+
+| Component | Allocation | Notes |
+|---|---|---|
+| System prompt | ≤ 25% of budget | Capped — compressed identity + instructions |
+| User message | actual size | Always included in full |
+| Reserved for response | 30% of remaining | Model needs room to answer |
+| **Tier 1** — Recent turns | 35% of remaining | Last 3–10 turns of conversation |
+| Tool definitions | ≤ 15% of remaining | Only enabled tools |
+| **Tier 2** — Retrieved history | 60% of remaining | Semantically relevant past messages |
+| **Tier 3 + 4** — Memory + KG | remainder | Persistent facts and knowledge graph entities |
+
+### Tier 1 — Working Memory (recent turns)
+
+The last N messages from the current session are always loaded first. This ensures continuity in active back-and-forth. The engine loads up to 10 recent turns and trims to fit the Tier 1 budget.
+
+### Tier 2 — Episodic Memory (vector search)
+
+Every message you send is embedded and stored in SQLite. When you send a new message, the engine embeds it and performs cosine similarity search over all past embeddings — across all sessions. The top-K most relevant past messages (above a 0.3 similarity threshold) are injected into context, deduplicated against Tier 1.
+
+This is how the agent recalls things you said weeks ago without you having to repeat them.
+
+**Embeddings provider:** configured via `embeddings.provider` (`auto`, `openai`, or `ollama`). If no embedding key is available, Tier 2 is skipped and the agent falls back to Tier 1 + Tier 3 only.
+
+### Tier 3 — Semantic Memory (persistent facts)
+
+`~/.openclio/memory.md` is loaded on every call and injected as a `[User context]` system block. Edit it to give the agent facts that should always be available:
+
+```markdown
+# Memory
+
+- My name is Idris
+- I'm building openclio, a Go AI agent
+- I prefer concise, direct answers
+- My homelab server is at 192.168.1.50
+- I use macOS 15 with zsh
+```
+
+Changes to this file take effect immediately on the next message — no restart needed. The engine compresses the file to fit within its token budget if it grows large.
+
+### Tier 4 — Knowledge Graph (auto-extracted entities)
+
+As you converse, openclio automatically extracts named entities (people, projects, deadlines) and relations from your messages and stores them in a SQLite knowledge graph (`kg_nodes` + `kg_edges` tables). On each call, the engine queries the graph for nodes matching terms in your current message and injects them as a `[Knowledge graph]` system block.
+
+This means if you mention a project name or a person several sessions ago, the agent can retrieve that entity and its relations without you re-explaining context.
+
+Manage the knowledge graph from the CLI:
+```bash
+openclio memory list             # show all stored entities
+openclio memory search project   # search by name or type
+openclio memory edit             # edit entities in $EDITOR
+```
+
+### Token Efficiency
+
+The budget-capped 4-tier engine measurably reduces tokens per LLM call compared to naively including the full conversation history:
 
 | Conversation length | Naive (all messages) | Engine (budget-capped) | Reduction |
 |---|---|---|---|
@@ -74,7 +152,18 @@ The 3-tier context engine measurably reduces tokens sent per LLM call compared t
 | 25 turns | ~754 tokens | ~200 tokens | 74% |
 | 50 turns | ~1,447 tokens | ~201 tokens | **87% (7.2×)** |
 
-The engine combines recent-turn working memory, vector-similarity episodic retrieval, and a hard token budget allocator. Prompt caching (`cache_control` markers) further reduces billing on repeated system prompt content.
+Prompt caching (`cache_control` markers on repeated system prompt content) further reduces billing on Anthropic and OpenAI providers.
+
+### Tuning memory
+
+```yaml
+context:
+  max_tokens_per_call: 8000    # increase for longer conversations
+  history_retrieval_k: 10      # how many past messages to retrieve via vector search
+  proactive_compaction: 0.5    # compact when context hits 50% of budget
+  compaction_keep_recent: 5    # turns kept verbatim during compaction
+  tool_result_summary: true    # auto-summarize large tool outputs
+```
 
 ## Installation
 
@@ -145,8 +234,15 @@ openclio init                    First-time setup wizard
 openclio chat                    Start interactive chat
 openclio serve                   Start HTTP server + channel adapters
 openclio cost                    Show token usage and cost summary
+openclio privacy                 Show privacy settings and aggregate usage summary
 openclio status                  Show agent status and config summary
+openclio auth login              Sign in with OpenAI (OAuth) from terminal
 openclio auth rotate             Generate a new auth token
+openclio memory list             Show known knowledge graph entities
+openclio memory search <query>   Search knowledge graph entities
+openclio memory edit             Edit knowledge graph entities in $EDITOR
+openclio history                 Show recent tool actions (write_file/exec)
+openclio undo <id>               Undo one write_file action by history ID
 openclio cron list               List scheduled cron jobs
 openclio cron run <name>         Trigger a cron job immediately
 openclio cron history            Show recent cron job results
@@ -231,7 +327,21 @@ cron:
     channel: telegram
 ```
 
-See [docs/configuration.md](docs/configuration.md) for the full reference. To use your **OpenAI paid account**, see [docs/openai-setup.md](docs/openai-setup.md) (API key setup; OpenAI does not use OAuth for API access).
+See [docs/configuration.md](docs/configuration.md) for the full reference.
+
+## OpenAI Sign-in
+
+openclio supports signing in with your OpenAI account via OAuth directly from the terminal — no manual API key copy-paste required.
+
+```bash
+openclio auth login
+```
+
+This opens a browser tab to OpenAI's authorization page (or prints the URL to open manually), completes the PKCE OAuth flow, and stores the token at `~/.openclio/openai_oauth_token.json` (mode `0600`).
+
+The `openclio init` wizard also offers OAuth sign-in as an alternative to manually entering an API key when choosing OpenAI as your provider.
+
+> **Note:** OpenAI OAuth is for ChatGPT/OpenAI account sign-in. For direct API access using an API key from platform.openai.com, set `api_key_env: OPENAI_API_KEY` in your config instead.
 
 ## Channel Adapters
 
@@ -242,8 +352,8 @@ Connect messaging platforms by setting the relevant environment variable and ena
 | **WebChat** | *(built-in)* | Always enabled in `serve` mode | Stable |
 | **Telegram** | `TELEGRAM_BOT_TOKEN` | `channels.telegram.token_env` | Stable |
 | **Discord** | `DISCORD_BOT_TOKEN` | `channels.discord.token_env` | Stable |
-| **WhatsApp** | *(none required)* | `channels.whatsapp.enabled: true` | Experimental (QR login via whatsmeow; Cloud API not yet available) |
 | **Slack** | `SLACK_BOT_TOKEN` | `channels.slack.token_env` | Stable |
+| **WhatsApp** | *(none required)* | `channels.whatsapp.enabled: true` | Experimental (QR login via whatsmeow; Cloud API not yet available) |
 
 Example config for Telegram + Discord:
 ```yaml
@@ -347,17 +457,20 @@ See [SECURITY.md](SECURITY.md) for the full threat model. Key points:
 cmd/openclio/       Entry point — subcommand routing
 internal/
 ├── agent/          LLM providers (Anthropic, OpenAI, Gemini, Ollama), agent loop
-├── context/        3-tier memory engine — recent turns + vector search + facts
-├── tools/          exec, read_file, write_file, list_dir, web_fetch
-├── gateway/        HTTP + WebSocket server, JWT auth, rate limiting
+├── context/        4-tier memory engine — recent turns + vector search + facts + knowledge graph
+├── kg/             Knowledge graph — entity/relation extractor and SQLite store
+├── memory/         Semantic memory store (persistent cross-session facts)
+├── tools/          exec, read_file, write_file, list_dir, web_fetch, web_search
+├── gateway/        HTTP + WebSocket server, JWT auth, rate limiting, OAuth flows
 ├── rpc/            gRPC AgentCore server for out-of-process channel adapters
-├── plugin/         Channel adapter manager (Telegram, Discord, WebChat, WhatsApp)
+├── plugin/         Channel adapter manager (Telegram, Discord, Slack, WebChat, WhatsApp)
 ├── mcp/            MCP stdio client — connects external tool servers
 ├── cron/           Scheduled task runner
 ├── workspace/      identity.md, user.md, memory.md, skills
 ├── cost/           Token usage tracking, cost estimation
+├── privacy/        Privacy report and data redaction
 ├── logger/         Structured slog logger with secret scrubbing
-└── storage/        SQLite (WAL mode, 0600 permissions)
+└── storage/        SQLite (WAL mode, 0600 permissions), 12 versioned migrations
 ```
 
 ## Contributing
